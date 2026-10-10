@@ -1,0 +1,27 @@
+# Python and local environments
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local tools and secrets
+.idea/
+.vscode/
+.env
+.env.*
+!.env.example
+
+# Downloaded datasets, checkpoints and generated results
+data/
+cache/
+*.pt
+*.pth
+results/*
+!results/.gitkeep
