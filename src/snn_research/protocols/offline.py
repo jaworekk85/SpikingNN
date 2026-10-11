@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Sequence
 
 import torch
 import torch.nn.functional as F
@@ -37,19 +38,30 @@ def evaluate(model, split: Split, encoding: EncodingConfig, batch_size: int, gen
     return {"accuracy": accuracy(torch.cat(logits), torch.cat(labels)), **activity_summary(spikes)}
 
 
-def run_offline(model, rule, train: Split, test: Split, encoding: EncodingConfig,
+def run_offline(model, rules: Sequence, train: Split, test: Split, encoding: EncodingConfig,
                 config: OfflineConfig, generator: torch.Generator) -> dict:
-    """Return per-epoch training traces and final test metrics."""
+    """Return per-epoch training traces and final test metrics.
+
+    Every rule receives the same observations and modulators after each minibatch:
+    ``loss`` (cross-entropy, with a graph only if some rule uses autograd) and
+    ``error`` (``onehot(label) - softmax(logits)``, detached).
+    """
     if train.role != "train" or test.role != "test":
         raise ValueError("run_offline expects a 'train' split and a 'test' split")
-    rule.init_state(model)
+    for rule in rules:
+        rule.init_state(model)
+    needs_graph = any(rule.declaration.uses_autograd for rule in rules)
     traces: dict[str, list[float]] = {"train_loss": [], "train_accuracy": []}
     for _ in range(config.epochs):
         losses, correct, seen = [], 0.0, 0
         for x, y in train.batches(config.batch_size, generator):
-            logits, observations = model(encode(encoding, x, generator).values)
-            loss = F.cross_entropy(logits, y)
-            rule.apply(rule.step(model, observations, {"loss": loss}))
+            with torch.set_grad_enabled(needs_graph):
+                logits, observations = model(encode(encoding, x, generator).values)
+                loss = F.cross_entropy(logits, y)
+            error = (F.one_hot(y, logits.shape[-1]) - logits.softmax(-1)).detach()
+            modulators = {"loss": loss, "error": error}
+            for rule in rules:
+                rule.apply(rule.step(model, observations, modulators))
             losses.append(loss.item())
             correct += accuracy(logits.detach(), y) * len(y)
             seen += len(y)

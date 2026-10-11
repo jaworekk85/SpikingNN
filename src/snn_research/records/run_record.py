@@ -24,7 +24,7 @@ class RunRecord:
     seed: int
     T: int
     provenance: dict[str, Any]  # git commit/dirty flag, versions, device
-    rule_declaration: dict[str, Any]
+    rule_declarations: list[dict[str, Any]]
     model: dict[str, Any]  # kind, neuron and weight counts
     dataset: dict[str, Any]  # version and split sizes
     protocol: str

@@ -3,9 +3,10 @@
 Zaczątek frameworka badawczego do spiking neural networks (SNN), lokalnych reguł
 uczenia oraz adaptacji do niestacjonarnych strumieni danych.
 
-**Stan: faza 1 — fundamenty, czeka na przegląd.** Pakiet zawiera referencyjny neuron
-LIF, enkodery, małe sieci MLP/conv, trening surrogate-gradient, metryki aktywności
-i niezmienny zapis wyników. Lokalne reguły uczenia i przesunięcia danych to kolejne fazy.
+**Stan: faza 2 — lokalne uczenie, czeka na przegląd.** Pakiet zawiera referencyjny
+neuron LIF, enkodery, małe sieci MLP/conv, trzy reguły uczenia (surrogate BPTT, STDP,
+reguła trójczynnikowa ze śladami uprawnień), metryki aktywności i niezmienny zapis
+wyników. Przesunięcia danych i protokoły strumieniowe to kolejna faza.
 
 - [Specyfikacja projektu](SNN_AGENT_RESEARCH_SPEC.md)
 - [Architektura, kontrakty i zależności](docs/research_framework.md)
@@ -28,6 +29,8 @@ wynikiem badawczym. Każde ziarno zapisuje nowy katalog w `results/`.
 
 ```powershell
 .\.venv\Scripts\python.exe experiments\reference\run.py --config configs\experiments\reference_tiny.yaml
+.\.venv\Scripts\python.exe experiments\reference\run.py --config configs\experiments\reference_tiny.yaml --rule three_factor
+.\.venv\Scripts\python.exe experiments\reference\run.py --config configs\experiments\reference_tiny.yaml --rule stdp
 ```
 
 ## Struktura

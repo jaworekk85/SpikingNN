@@ -22,8 +22,23 @@ neuron:
 model:
   kind: mlp
   hidden: [32]
-rule:
+  init_gain: 5.0  # default init leaves hidden LIF layers almost silent
+rule: surrogate_bptt  # or three_factor, stdp (STDP hidden + three-factor readout)
+surrogate_bptt:
   lr: 0.01
+three_factor:
+  lr: 1.0
+  readout_lr: 5.0
+  tau_pre_ms: 10.0
+  tau_eligibility_ms: 20.0
+  pseudo_slope: 5.0
+  train_hidden: true
+stdp:
+  a_plus: 0.001
+  a_minus: 0.00105
+  tau_plus_ms: 10.0
+  tau_minus_ms: 10.0
+  w_max: 1.0
 protocol:
   epochs: 5
   batch_size: 32

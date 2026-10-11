@@ -1,9 +1,10 @@
 # Reference pipeline validation
 
-Phase 1 subset (`run.py`, config `configs/experiments/reference_tiny.yaml`):
-seeded synthetic prototypes -> rate encoding -> LIF MLP -> surrogate BPTT ->
-offline test evaluation -> one `RunRecord` per seed. MNIST, the local rule, the shift
-and the figure/table arrive with later phases.
+Current subset (`run.py`, config `configs/experiments/reference_tiny.yaml`):
+seeded synthetic prototypes -> rate encoding -> LIF MLP -> learning rule ->
+offline test evaluation -> one `RunRecord` per seed. The rule is chosen by `rule:` in
+the config or `--rule surrogate_bptt | three_factor | stdp`. MNIST, the shift and the
+figure/table arrive with later phases.
 
 The complete planned reference uses a small LIF MLP, rate-encoded MNIST
 or a tiny event-data subset, surrogate BPTT and one local/three-factor rule, a

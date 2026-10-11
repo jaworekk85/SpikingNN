@@ -4,9 +4,8 @@ Updated: 2026-10-11 (Europe/Warsaw).
 
 ## Current phase
 
-**Phase 1 — foundations: reviewed and accepted (2026-10-11).**
-Phase 0 was accepted on the same day. Phase 2 may start on request; no Phase 2 work
-has started.
+**Phase 2 — local learning: complete, awaiting review.**
+Phases 0 and 1 were reviewed and accepted on 2026-10-11. No Phase 3 work has started.
 
 ## Done
 
@@ -38,17 +37,40 @@ has started.
 - `experiments/reference/run.py` + `configs/experiments/reference_tiny.yaml`:
   one record per seed.
 
+### Phase 2
+- `LearningRule` protocol (interface only, no base class) and `LocalObservation`
+  (`pre`, `post`, `post_potential`), the only input of local numerical kernels.
+- `STDP`: pair-based, exponential traces, clipped weights; `synapse_local`, no modulator.
+- `ThreeFactor`: presynaptic trace x pseudo-derivative -> eligibility trace, times an
+  output-error modulator; hidden layers get the error through fixed random feedback.
+  Readout uses the delta rule with its own `readout_lr`. `global_modulated`.
+- Model observations now include presynaptic input and the pre-reset potential `u`
+  (the value compared with threshold); `ModelConfig.init_gain` scales initial weights.
+- `run_offline` accepts several rules; forward passes build a graph only if a rule
+  uses autograd. Modulators: `loss` and detached `error`.
+- Reference: `rule: surrogate_bptt | three_factor | stdp` (or `--rule`); `stdp` means
+  STDP on hidden layers + three-factor delta rule on the readout. Records store
+  `rule_declarations` for every rule used.
+- `docs/learning_rules.md` documents both rules and their verified properties.
+
 ## Validation
 
-- Local: Python 3.12.3, PyTorch 2.14.1+cpu, `pytest`: 23 passed in ~9 s.
+- Local: Python 3.12.3, PyTorch 2.14.1+cpu, `pytest`: 38 passed in ~6 s.
+- Phase 2 tests: STDP window sign/shape, eligibility decay, zero-modulator update,
+  minibatch = mean of per-sample updates (both rules), no graph / no `.grad` from local
+  rules even after a grad-enabled forward, kernels accept only `LocalObservation`,
+  declarations; every rule trains the same model and data, deterministically per seed.
 - Tests: analytic LIF response to constant input, threshold crossing, both resets,
   refractory period, surrogate gradient flow; encoder determinism/statistics/timing;
   MLP/conv shapes, neuron counts, no state carried between calls; activity metrics on
   hand-computed tensors; record validation, immutable store, config unknown keys,
   split roles; end-to-end smoke run (learns above chance, same seed -> same metrics).
-- Reference tiny run (2 seeds, synthetic, 4 classes): test accuracy 0.66 / 0.70,
-  spike rate ~0.08. Pipeline validation only, not a result.
-- CI (Python 3.11 and 3.12, CPU PyTorch wheels) is configured but has not run yet.
+- Reference tiny run after Phase 2 (`init_gain: 5`, 2 seeds, synthetic, 4 classes),
+  test accuracy / overall spike rate: surrogate BPTT 0.94, 0.98 / ~0.11; three-factor
+  0.98, 0.87 / ~0.24; STDP + three-factor readout 0.90, 0.94 / ~0.04. Pipeline
+  validation only, not a result or a rule comparison (single tiny config, no tuning
+  protocol, no quality-matched comparison).
+- CI runs on every push to `main` (Python 3.11 and 3.12, CPU PyTorch wheels).
 
 ## Decisions
 
@@ -77,12 +99,23 @@ has started.
 - The conv model stays minimal (one 3x3/stride-2 conv LIF layer) until an experiment
   needs more.
 
+## Open questions (Phase 2, for review)
+
+- Default PyTorch init left hidden LIF layers almost silent, so STDP had nothing to
+  act on. The tiny config now uses `init_gain: 5.0`. A principled alternative
+  (threshold/init calibration, homeostasis) can wait until real data is used.
+- In the `stdp` setting the readout is trained by the three-factor delta rule; STDP
+  alone is unsupervised. Its accuracy mainly reflects random-like hidden features plus
+  a trained readout; whether STDP features help is a research question, not tested.
+- Three-factor modulator arrives once per sample, so updates are per sample or
+  minibatch, not per timestep; per-timestep online learning signals are not implemented.
+- Hidden-layer error feedback uses fixed random matrices drawn from the run seed.
+
 ## Known limitations
 
 - Only the offline protocol exists; no shifts, streams, prequential evaluation or
   forgetting/recovery metrics (Phase 3).
 - No synaptic-operation counting or energy proxy (Phase 4).
-- No local learning rules or locality guards (Phase 2).
 - No reporting (comparison guards, figures, tables) yet.
 
 ## Scientific caveats
@@ -90,9 +123,10 @@ has started.
 - Synthetic smoke runs validate the pipeline; they are not research results.
 - Spike counts are not synaptic operations and not measured energy.
 - Surrogate BPTT is declared and treated as global-gradient learning, not local.
+- The three-factor rule is `global_modulated`: weights update from local traces and a
+  broadcast error signal; it is not synapse-local. Only STDP is `synapse_local`.
 
-## Next phase
+## Next phase, after review
 
-Phase 2: `LearningRule` interface, STDP and one three-factor rule with eligibility
-traces, locality-declaration and autograd-guard tests; same model and data trainable
-with either rule.
+Phase 3: `Shift` library, `Protocol` implementations including prequential
+evaluation, forgetting/recovery/adaptation-cost metrics.

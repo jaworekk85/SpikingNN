@@ -50,8 +50,9 @@ class LIFParams:
 
 @dataclass
 class LIFState:
-    v: torch.Tensor
+    v: torch.Tensor  # membrane potential after reset
     refractory: torch.Tensor  # remaining refractory steps, integer tensor
+    u: torch.Tensor  # potential of the last step before reset, compared with threshold
 
 
 class _SpikeFn(torch.autograd.Function):
@@ -79,20 +80,21 @@ class LIF:
         return LIFState(
             v=torch.zeros_like(like),
             refractory=torch.zeros_like(like, dtype=torch.long),
+            u=torch.zeros_like(like),
         )
 
     def step(self, input_current: torch.Tensor, state: LIFState) -> tuple[torch.Tensor, LIFState]:
         p = self.params
         active = state.refractory == 0
-        v = torch.where(active, p.beta * state.v + (1 - p.beta) * input_current, torch.zeros_like(state.v))
-        spikes = _SpikeFn.apply(v - p.threshold, p.surrogate_slope) * active
+        u = torch.where(active, p.beta * state.v + (1 - p.beta) * input_current, torch.zeros_like(state.v))
+        spikes = _SpikeFn.apply(u - p.threshold, p.surrogate_slope) * active
         if p.reset == "subtract":
-            v = v - spikes * p.threshold
+            v = u - spikes * p.threshold
         else:
-            v = v * (1 - spikes)
+            v = u * (1 - spikes)
         refractory = torch.where(
             spikes.detach() > 0,
             torch.full_like(state.refractory, p.refractory_steps),
             (state.refractory - 1).clamp(min=0),
         )
-        return spikes, LIFState(v=v, refractory=refractory)
+        return spikes, LIFState(v=v, refractory=refractory, u=u)

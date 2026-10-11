@@ -11,7 +11,7 @@ from snn_research.utils import from_dict
 
 def make_record(**overrides) -> RunRecord:
     fields = dict(
-        experiment="unit", config={"a": 1}, seed=0, T=5, provenance={}, rule_declaration={},
+        experiment="unit", config={"a": 1}, seed=0, T=5, provenance={}, rule_declarations=[],
         model={}, dataset={}, protocol="offline", metrics={"test/accuracy": 0.5}, traces={"loss": [1.0]},
     )
     return RunRecord(**{**fields, **overrides})
