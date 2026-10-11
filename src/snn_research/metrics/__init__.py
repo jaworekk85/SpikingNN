@@ -1,1 +1,5 @@
-"""Placeholder for quality, activity and adaptation metrics (Phases 1–4)."""
+"""Quality and activity metrics."""
+
+from .activity import accuracy, activity_summary, spike_rate, temporal_sparsity
+
+__all__ = ["accuracy", "activity_summary", "spike_rate", "temporal_sparsity"]

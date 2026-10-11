@@ -1,1 +1,5 @@
-"""Placeholder for training and evaluation protocols (Phases 1–3)."""
+"""Training and evaluation protocols (offline in Phase 1)."""
+
+from .offline import OfflineConfig, evaluate, run_offline
+
+__all__ = ["OfflineConfig", "evaluate", "run_offline"]

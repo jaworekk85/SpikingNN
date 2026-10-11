@@ -1,6 +1,7 @@
 # Metrics — definitions and planned checks
 
-Phase 0 documentation only; no metrics are implemented yet.
+Implemented in Phase 1 (`snn_research.metrics`): accuracy, spike rate and temporal
+sparsity, per layer and overall. The other rows are planned for later phases.
 
 | Quantity | Definition / requirement |
 | --- | --- |

@@ -1,6 +1,8 @@
 # Learning rules — proposed contract
 
-Phase 0 documentation only. See `research_framework.md` for interfaces and phases.
+Implemented in Phase 1: `RuleDeclaration` (validated declared properties) and
+`SurrogateBPTT` (`uses_autograd=True`, `locality=global_gradient`, `modulator_source=error`;
+the loss is passed as the `"loss"` modulator). See `research_framework.md` for interfaces.
 
 Rules declare `uses_autograd`, `locality`, `online_capable`, maintained state and
 `modulator_source`. Local kernels receive only their declared synaptic/neuron

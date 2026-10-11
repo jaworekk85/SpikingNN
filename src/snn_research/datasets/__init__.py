@@ -1,1 +1,5 @@
-"""Placeholder for split-aware datasets and streams (Phases 1–3)."""
+"""Split-aware datasets."""
+
+from .synthetic import ROLES, Split, SyntheticConfig, synthetic_prototypes
+
+__all__ = ["ROLES", "Split", "SyntheticConfig", "synthetic_prototypes"]

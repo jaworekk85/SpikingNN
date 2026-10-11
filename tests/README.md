@@ -1,7 +1,7 @@
 # Test plan
 
-Scientific tests are introduced with concrete implementations, starting in Phase 1.
-All tests use CPU and tiny synthetic data and must run well under one minute.
+Run with `python -m pytest -q`. All tests use CPU and tiny synthetic data and must
+run well under one minute (Phase 1 suite: ~10 s).
 
 - Phase 1: analytic LIF response, threshold/reset/refractory, deterministic encoding,
   activity metrics, record schema and immutable-store checks, synthetic smoke run.
@@ -11,5 +11,4 @@ All tests use CPU and tiny synthetic data and must run well under one minute.
   shift-phase reporting, forgetting/recovery/adaptation metrics.
 - Phase 4+: operation counting, proxy/measurement separation and comparison guards.
 
-Phase 0 CI verifies source compilation and building/installing/importing the skeleton;
-it does not claim scientific coverage.
+CI installs the package with CPU PyTorch and runs the suite on Python 3.11 and 3.12.

@@ -1,0 +1,29 @@
+# Tiny CPU pipeline check on synthetic data. Pipeline validation, not a result.
+experiment: reference_tiny
+seeds: [0, 1]
+device: cpu
+data:
+  n_train: 256
+  n_test: 128
+  n_classes: 4
+  shape: [16]
+  noise: 0.15
+  seed: 0
+encoding:
+  kind: rate
+  T: 20
+neuron:
+  tau_mem_ms: 10.0
+  dt_ms: 1.0
+  threshold: 1.0
+  reset: subtract
+  refractory_steps: 0
+  surrogate_slope: 10.0
+model:
+  kind: mlp
+  hidden: [32]
+rule:
+  lr: 0.01
+protocol:
+  epochs: 5
+  batch_size: 32
