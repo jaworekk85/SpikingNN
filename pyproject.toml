@@ -7,7 +7,7 @@ name = "snn-research"
 version = "0.0.1"
 description = "Research framework skeleton for spiking neural networks and local learning"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = []
 
 [tool.setuptools.packages.find]

@@ -9,7 +9,7 @@ authorize experiments. Stop for review before Phase 1.
 
 | Dependency | Role | Introduction |
 | --- | --- | --- |
-| Python 3.10+ | Standard-library dataclasses, typing, pathlib, JSON | Phase 0 |
+| Python 3.11+ | Standard-library dataclasses, typing, pathlib, JSON | Phase 0 |
 | setuptools + wheel | Package build with a `src/` layout | Phase 0 |
 | PyTorch | Reference tensors, LIF dynamics, models and training | Phase 1 |
 | PyYAML | Load YAML into explicitly validated dataclasses | Phase 1 |
@@ -70,7 +70,7 @@ PyTorch tensors for the reference implementation does not require an adapter fac
 
 ## Shared conventions
 
-- Proposed encoded tensor shape: `[T, batch, ...]`; a timestep slice is `[batch, ...]`.
+- Encoded tensor shape (accepted 2026-10-11): `[T, batch, ...]`; a timestep slice is `[batch, ...]`; `dt` is in milliseconds.
 - Config declares `T`, `dt_ms`, seed list, device and reset policy explicitly.
 - States reset at explicit protocol boundaries; online traces persist only when configured.
 - Dataset splits carry `train`, `tune` or `test` roles. Test data cannot enter tuning.

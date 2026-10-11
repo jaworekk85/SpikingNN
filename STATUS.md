@@ -1,11 +1,11 @@
 # Project status
 
-Updated: 2026-10-10 (Europe/Warsaw).
+Updated: 2026-10-11 (Europe/Warsaw).
 
 ## Current phase
 
-**Phase 0 — architecture proposal: complete, awaiting review.**
-No Phase 1 implementation has started.
+**Phase 0 — architecture proposal: reviewed and accepted (2026-10-11).**
+Phase 1 may start on request. No Phase 1 implementation has started.
 
 ## Done
 
@@ -21,25 +21,30 @@ No Phase 1 implementation has started.
 
 ## Validation
 
-- Python 3.10.11: source compilation passed.
-- Built a wheel and installed `snn-research==0.0.1` in the local `.venv`.
+- Python 3.10.11: source compilation passed (initial Phase 0 validation).
+- After the review, recreated the local `.venv` on Python 3.12.3: source compilation,
+  wheel build/install of `snn-research==0.0.1` and isolated imports of all 13 modules passed.
 - Imported the installed package and all 13 component modules in isolated Python mode.
 - Confirmed Git ignores the virtual environment, build artifacts, bytecode and results.
-- CI is configured for Python 3.10 and 3.12; local validation covers 3.10 only.
+- CI is configured for Python 3.11 and 3.12; local validation covers 3.12 only.
 - Scientific tests are deferred until concrete implementations exist in Phase 1.
 
-## Proposed decisions and open questions
+## Decisions (Phase 0 review, 2026-10-11)
 
-- Use Python 3.10+, PyTorch, PyYAML and typed standard-library dataclasses.
-- Choose snnTorch as the single optional surrogate-gradient adapter; the reference
+- Python 3.11+ (raised from 3.10): PyTorch 2.14 is the last release with Python 3.10
+  wheels; 2.15 (GA 2026-10-28) requires 3.11+. Use PyTorch, PyYAML and typed
+  standard-library dataclasses.
+- snnTorch (MIT) is the single optional surrogate-gradient adapter; the reference
   LIF remains our own PyTorch implementation. Add the adapter only when needed.
+- Tensor convention accepted: `[T, batch, ...]`, with `dt` in milliseconds.
 - Keep public interfaces in this phase as documentation; add concrete code in the
   corresponding implementation phase, without registries or backend class hierarchies.
-- Proposed tensor convention: `[T, batch, ...]`, with `dt` in milliseconds. Confirm
-  before implementing dynamics and encoders in Phase 1.
+- No license for now (all rights reserved); revisit before any public release.
+
+## Open questions
+
 - Specify convolutional synaptic-operation counting for padding and weight sharing
   when convolutional metrics are implemented.
-- Licensing remains a maintainer decision; no license has been assumed.
 
 ## Known limitations
 
@@ -53,7 +58,7 @@ No Phase 1 implementation has started.
 - Spike counts and synaptic operations do not constitute measured energy.
 - Locality must be verified by interface restrictions and tests before making claims.
 
-## Next phase, after review
+## Next phase
 
 Phase 1: reference LIF dynamics, small MLP/conv SNN, encoders, surrogate-gradient
 training, spike/activity metrics, validated immutable result storage and CPU tests.

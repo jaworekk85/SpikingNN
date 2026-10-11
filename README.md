@@ -13,7 +13,7 @@ eksperymentów. Kolejne fazy wymagają przeglądu zgodnie ze specyfikacją.
 
 ## Instalacja szkieletu
 
-Python 3.10 lub nowszy. Polecenia dla PowerShell, z katalogu repozytorium:
+Python 3.11 lub nowszy. Polecenia dla PowerShell, z katalogu repozytorium:
 
 ```powershell
 python -m venv .venv
