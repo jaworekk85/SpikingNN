@@ -22,7 +22,7 @@ from pathlib import Path
 
 import torch
 
-from snn_research.datasets import Split, Stream, SyntheticConfig, synthetic_prototypes
+from snn_research.datasets import Stream, SyntheticConfig, synthetic_prototypes
 from snn_research.encoding import EncodingConfig
 from snn_research.learning_rules import (
     STDP,
@@ -37,7 +37,7 @@ from snn_research.neurons import LIFParams
 from snn_research.metrics import forgetting
 from snn_research.protocols import OfflineConfig, PrequentialConfig, evaluate, run_offline, run_prequential
 from snn_research.records import RunRecord, save_run
-from snn_research.shifts import ShiftConfig, apply_shift
+from snn_research.shifts import ShiftConfig
 from snn_research.utils import load_config, provenance, resolved, seed_everything
 
 
@@ -80,31 +80,25 @@ def build_rules(config: ReferenceConfig) -> list:
     return [STDP(config.stdp), ThreeFactor(replace(config.three_factor, train_hidden=False))]
 
 
-def shifted(split: Split, shift: ShiftConfig, n_classes: int) -> Split:
-    """The split under the shift at full strength (a held-out shifted condition)."""
-    g = torch.Generator().manual_seed(shift.seed + 1)
-    x, y = apply_shift(shift, split.x, split.y, torch.ones(len(split.y)), g, n_classes)
-    return Split(x, y, split.role, f"{split.version}+{shift.kind}{shift.magnitude}")
-
-
 def run_seed(config: ReferenceConfig, seed: int) -> RunRecord:
     generator = seed_everything(seed)
     n_classes = config.data.n_classes
     train, test = synthetic_prototypes(config.data)
-    test_shifted = shifted(test, config.shift, n_classes)
     model = build_model(config.model, tuple(train.x.shape[1:]), n_classes, config.neuron)
     rules = build_rules(config)
     for rule in rules:
         rule.init_state(model)
 
-    def test_accuracy(split: Split) -> float:
-        return evaluate(model, split, config.encoding, config.pretrain.batch_size, generator)["accuracy"]
+    def test_accuracy(shifts: tuple[ShiftConfig, ...] = ()) -> float:
+        """Clean test accuracy, or under ``shifts`` at full strength."""
+        return evaluate(model, test, config.encoding, config.pretrain.batch_size, generator,
+                        shifts, n_classes)["accuracy"]
 
     pretrain = run_offline(model, rules, train, test, config.encoding, config.pretrain, generator)
-    clean_before, shifted_before = pretrain["test"]["accuracy"], test_accuracy(test_shifted)
+    clean_before, shifted_before = pretrain["test"]["accuracy"], test_accuracy((config.shift,))
     stream = Stream(train, config.stream.length, n_classes, seed=seed, shifts=(config.shift,))
     online = run_prequential(model, rules, stream, config.encoding, config.stream, generator)
-    clean_after, shifted_after = test_accuracy(test), test_accuracy(test_shifted)
+    clean_after, shifted_after = test_accuracy(), test_accuracy((config.shift,))
 
     metrics = {f"pretrain/test/{k}": v for k, v in pretrain["test"].items()}
     metrics.update({f"stream/{k}": v for k, v in online["metrics"].items()})
@@ -131,7 +125,7 @@ def run_seed(config: ReferenceConfig, seed: int) -> RunRecord:
             "n_weights": sum(p.numel() for n, p in model.named_parameters() if n.endswith("weight")),
         },
         dataset={"version": train.version, "n_train": len(train.y), "n_test": len(test.y),
-                 "shifted_test_version": test_shifted.version},
+                 "shifted_test": "test split under `shift` at full strength"},
         protocol="offline_pretrain -> prequential_stream",
         metrics=metrics,
         traces={**{f"pretrain/{k}": v for k, v in pretrain["traces"].items()},

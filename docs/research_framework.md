@@ -151,10 +151,12 @@ For an abrupt shift, document which boundary sample represents the transition.
 Implemented (Phase 3): `Schedule(timing, start, end, steps, period)` with
 `strength(index)` and `phase_at(index)`; sample `start` is the first shifted sample.
 Kinds: `noise` (covariate), `intensity` (illumination-like, changes input event rate
-under rate coding) and `label_permutation` (concept). New classes/tasks use the task
-sequence protocol. `Stream` applies shifts by stream index in their saved order, each
-with its own seeded generator. Temporal-dynamics shifts and held-out unseen
-conditions beyond a fully shifted test split are not implemented yet.
+under rate coding), `label_permutation` (concept) and `latency_jitter` (temporal
+dynamics: random per-channel delays applied after encoding). New classes/tasks use the
+task sequence protocol. `Stream` encodes its samples: sample-level shifts in saved
+order -> encoding -> temporal shifts in saved order, each shift with its own seeded
+generator. Held-out unseen conditions beyond a fully shifted test split are not
+implemented yet.
 
 ### Protocol (Phase 3; offline subset in Phase 1)
 

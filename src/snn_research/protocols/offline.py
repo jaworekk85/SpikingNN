@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from ..datasets import Split
 from ..encoding import EncodingConfig, encode
 from ..metrics import accuracy, activity_summary
+from ..shifts import ShiftConfig, shift_and_encode
 
 
 @dataclass(frozen=True)
@@ -23,13 +24,21 @@ class OfflineConfig:
             raise ValueError("epochs and batch_size must be positive")
 
 
-def evaluate(model, split: Split, encoding: EncodingConfig, batch_size: int, generator: torch.Generator) -> dict[str, float]:
-    """Accuracy and activity over a whole split, without updating the model."""
+def evaluate(model, split: Split, encoding: EncodingConfig, batch_size: int, generator: torch.Generator,
+             shifts: tuple[ShiftConfig, ...] = (), n_classes: int = 0) -> dict[str, float]:
+    """Accuracy and activity over a whole split, without updating the model.
+
+    With ``shifts``, every sample is evaluated under them at full strength (a held-out
+    shifted condition), using generators seeded with ``shift.seed + 1``.
+    """
     logits, labels = [], []
     layer_spikes: dict[str, list[torch.Tensor]] = {}
+    shift_generators = [torch.Generator().manual_seed(s.seed + 1) for s in shifts]
     with torch.no_grad():
         for x, y in split.batches(batch_size):
-            out, observations = model(encode(encoding, x, generator).values)
+            strengths = [torch.ones(len(y)) for _ in shifts]
+            inputs, y = shift_and_encode(shifts, x, y, strengths, shift_generators, encoding, generator, n_classes)
+            out, observations = model(inputs)
             logits.append(out)
             labels.append(y)
             for name, obs in observations.items():
@@ -38,9 +47,9 @@ def evaluate(model, split: Split, encoding: EncodingConfig, batch_size: int, gen
     return {"accuracy": accuracy(torch.cat(logits), torch.cat(labels)), **activity_summary(spikes)}
 
 
-def forward_and_learn(model, rules: Sequence, x: torch.Tensor, y: torch.Tensor, encoding: EncodingConfig,
-                      generator: torch.Generator, learn: bool = True):
-    """One forward pass; then, if ``learn``, every rule updates from that same pass.
+def forward_and_learn(model, rules: Sequence, inputs: torch.Tensor, y: torch.Tensor, learn: bool = True):
+    """One forward pass on encoded ``inputs``; then, if ``learn``, every rule updates
+    from that same pass.
 
     Rules receive the same observations and modulators: ``loss`` (cross-entropy, with
     a graph only if some rule uses autograd) and ``error`` (``onehot(label) -
@@ -48,7 +57,7 @@ def forward_and_learn(model, rules: Sequence, x: torch.Tensor, y: torch.Tensor, 
     """
     needs_graph = learn and any(rule.declaration.uses_autograd for rule in rules)
     with torch.set_grad_enabled(needs_graph):
-        logits, observations = model(encode(encoding, x, generator).values)
+        logits, observations = model(inputs)
         loss = F.cross_entropy(logits, y)
     if learn:
         error = (F.one_hot(y, logits.shape[-1]) - logits.softmax(-1)).detach()
@@ -67,7 +76,7 @@ def train_epochs(model, rules: Sequence, train: Split, encoding: EncodingConfig,
     for _ in range(config.epochs):
         losses, correct, seen = [], 0.0, 0
         for x, y in train.batches(config.batch_size, generator):
-            logits, _, loss = forward_and_learn(model, rules, x, y, encoding, generator)
+            logits, _, loss = forward_and_learn(model, rules, encode(encoding, x, generator).values, y)
             losses.append(loss)
             correct += accuracy(logits, y) * len(y)
             seen += len(y)

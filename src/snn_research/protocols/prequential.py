@@ -41,8 +41,8 @@ def run_prequential(model, rules: Sequence, stream: Stream, encoding: EncodingCo
     correct: list[float] = []
     spikes: list[float] = []
     update_at: list[int] = []
-    for index, x, y in stream.batches(config.batch_size):
-        logits, observations, _ = forward_and_learn(model, rules, x, y, encoding, generator, learn=config.adapt)
+    for index, inputs, y in stream.batches(config.batch_size, encoding, generator):
+        logits, observations, _ = forward_and_learn(model, rules, inputs, y, learn=config.adapt)
         correct += (logits.argmax(-1) == y).float().tolist()
         spikes += sum(obs.spikes.flatten(2).sum((0, 2)) for obs in observations.values()).tolist()
         if config.adapt:

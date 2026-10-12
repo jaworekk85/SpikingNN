@@ -6,7 +6,8 @@ from typing import Iterator
 
 import torch
 
-from ..shifts import ShiftConfig, apply_shift
+from ..encoding import EncodingConfig
+from ..shifts import ShiftConfig, shift_and_encode
 from .synthetic import Split
 
 
@@ -14,7 +15,8 @@ class Stream:
     """``length`` samples drawn from a ``train``-role split in a seeded order.
 
     The order is a concatenation of seeded permutations of the split. Shifts are
-    applied by stream index, in the given order, each with its own seeded generator.
+    applied by stream index (ordering as in ``shift_and_encode``), each with its own
+    seeded generator.
     """
 
     def __init__(self, split: Split, length: int, n_classes: int, seed: int,
@@ -28,12 +30,14 @@ class Stream:
         self.order = torch.cat([torch.randperm(len(split.y), generator=g) for _ in range(repeats)])[:length]
         self.split, self.length, self.n_classes, self.shifts = split, length, n_classes, shifts
 
-    def batches(self, batch_size: int) -> Iterator[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
-        """Yield ``(stream_index, x, y)`` minibatches in stream order."""
+    def batches(self, batch_size: int, encoding: EncodingConfig,
+                generator: torch.Generator) -> Iterator[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+        """Yield ``(stream_index, encoded_inputs [T, batch, ...], y)`` in stream order."""
         generators = [torch.Generator().manual_seed(s.seed) for s in self.shifts]
         for start in range(0, self.length, batch_size):
             index = torch.arange(start, min(start + batch_size, self.length))
             x, y = self.split.x[self.order[index]], self.split.y[self.order[index]]
-            for shift, g in zip(self.shifts, generators):
-                x, y = apply_shift(shift, x, y, shift.schedule.strength(index), g, self.n_classes)
-            yield index, x, y
+            strengths = [s.schedule.strength(index) for s in self.shifts]
+            inputs, y = shift_and_encode(self.shifts, x, y, strengths, generators, encoding, generator,
+                                         self.n_classes)
+            yield index, inputs, y

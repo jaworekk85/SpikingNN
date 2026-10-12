@@ -17,8 +17,13 @@ Shift kinds (``magnitude`` is the value at full strength):
   coding): multiply by ``1 + strength * (magnitude - 1)``.
 - ``label_permutation`` (concept shift): with probability ``strength * magnitude``,
   relabel ``y -> (y + 1) % n_classes``.
+- ``latency_jitter`` (temporal dynamics): after encoding, each input channel's whole
+  train is delayed by a random integer in ``[0, round(strength * magnitude)]`` steps;
+  activity shifted past ``T`` is lost and the start is zero-filled.
 
-New classes/tasks are covered by the task-sequence protocol, not by a transform.
+``shift_and_encode`` applies sample-level kinds in their saved order, encodes, then
+applies temporal kinds in their saved order. New classes/tasks are covered by the
+task-sequence protocol, not by a transform.
 """
 
 from __future__ import annotations
@@ -27,8 +32,12 @@ from dataclasses import dataclass, field
 
 import torch
 
+from ..encoding import EncodingConfig, encode
+
 TIMINGS = ("abrupt", "gradual", "incremental", "recurring")
-KINDS = ("noise", "intensity", "label_permutation")
+SAMPLE_KINDS = ("noise", "intensity", "label_permutation")
+TEMPORAL_KINDS = ("latency_jitter",)
+KINDS = SAMPLE_KINDS + TEMPORAL_KINDS
 
 
 @dataclass(frozen=True)
@@ -83,6 +92,8 @@ class ShiftConfig:
 def apply_shift(shift: ShiftConfig, x: torch.Tensor, y: torch.Tensor, strength: torch.Tensor,
                 generator: torch.Generator, n_classes: int) -> tuple[torch.Tensor, torch.Tensor]:
     """Shift a batch ``x [n, ...]``, ``y [n]`` with per-sample ``strength [n]``."""
+    if shift.kind not in SAMPLE_KINDS:
+        raise ValueError(f"{shift.kind!r} acts on encoded input; use shift_and_encode")
     s = strength.view(-1, *([1] * (x.dim() - 1)))
     if shift.kind == "noise":
         noise = torch.randn(x.shape, generator=generator)
@@ -91,3 +102,28 @@ def apply_shift(shift: ShiftConfig, x: torch.Tensor, y: torch.Tensor, strength: 
         return (x * (1 + s * (shift.magnitude - 1))).clamp(0, 1), y
     flip = torch.rand(y.shape, generator=generator) < strength * shift.magnitude
     return x, torch.where(flip, (y + 1) % n_classes, y)
+
+
+def delay_inputs(values: torch.Tensor, max_delay: torch.Tensor, generator: torch.Generator) -> torch.Tensor:
+    """Delay each channel of ``values [T, batch, ...]`` by a random integer in
+    ``[0, max_delay[b]]`` steps, zero-filling the start."""
+    T = values.shape[0]
+    k = max_delay.round().long().view(-1, *([1] * (values.dim() - 2)))
+    delay = (torch.rand(values.shape[1:], generator=generator) * (k + 1)).floor().long()
+    source = torch.arange(T).view(T, *([1] * (values.dim() - 1))) - delay
+    return values.gather(0, source.clamp(min=0)) * (source >= 0)
+
+
+def shift_and_encode(shifts: tuple[ShiftConfig, ...], x: torch.Tensor, y: torch.Tensor,
+                     strengths: list[torch.Tensor], generators: list[torch.Generator],
+                     encoding: EncodingConfig, encode_generator: torch.Generator,
+                     n_classes: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """Sample-level shifts -> encoding -> temporal shifts; returns ``(inputs, y)``."""
+    for shift, s, g in zip(shifts, strengths, generators):
+        if shift.kind in SAMPLE_KINDS:
+            x, y = apply_shift(shift, x, y, s, g, n_classes)
+    inputs = encode(encoding, x, encode_generator).values
+    for shift, s, g in zip(shifts, strengths, generators):
+        if shift.kind == "latency_jitter":
+            inputs = delay_inputs(inputs, s * shift.magnitude, g)
+    return inputs, y

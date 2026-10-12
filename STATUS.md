@@ -58,9 +58,12 @@ on request, then Phase 3 requested). No Phase 4 work has started.
 - `shifts`: `Schedule` (`abrupt | gradual | incremental | recurring`, `start`, `end`,
   `steps`, `period`) giving per-index strength and `before | during | after` phase;
   `ShiftConfig` kinds `noise` (covariate), `intensity` (illumination-like / input event
-  rate) and `label_permutation` (concept); seeded `apply_shift`.
-- `datasets.Stream`: seeded order over a `train`-role split, shifts applied by stream
-  index in saved order; `Split.subset(classes)` for task sequences.
+  rate), `label_permutation` (concept) and `latency_jitter` (temporal dynamics: random
+  per-channel delays after encoding); `shift_and_encode` orders sample-level shifts ->
+  encoding -> temporal shifts.
+- `datasets.Stream`: seeded order over a `train`-role split; yields encoded, shifted
+  minibatches by stream index; `Split.subset(classes)` for task sequences.
+- `evaluate(..., shifts=...)` evaluates a held-out split under shifts at full strength.
 - `protocols`: `forward_and_learn` (one forward, then rule updates from it),
   `train_epochs`, `run_offline`, `run_prequential` (test-then-train; `adapt` flag) and
   `run_task_sequence` (accuracy matrix over all tasks after each task). Rules are now
@@ -74,10 +77,11 @@ on request, then Phase 3 requested). No Phase 4 work has started.
 
 ## Validation
 
-- Local: Python 3.12.3, PyTorch 2.14.1+cpu, `pytest`: 50 passed in ~14 s.
+- Local: Python 3.12.3, PyTorch 2.14.1+cpu, `pytest`: 52 passed in ~13 s.
 - Phase 3 tests: strengths for all four timings, phases and schedule validation; shift
   kinds at zero/full strength and seeded noise; stream order, index-based shifting and
-  `train`-role guard; phase quality, recovery (incl. unrecovered `None`) and forgetting
+  `train`-role guard; latency jitter bounds, determinism and post-encoding application
+  from the shift start; phase quality, recovery (incl. unrecovered `None`) and forgetting
   on hand-made traces; prequential logs forward -> update per batch and records quality
   from pre-update logits; `adapt=False` leaves weights unchanged; task-sequence matrix
   and forgetting; reference record contains shift, pre/during/post quality, recovery,
@@ -152,9 +156,13 @@ on request, then Phase 3 requested). No Phase 4 work has started.
   "within the first full window", not exactly 64.
 - Forgetting in the reference uses two checkpoints (before/after the stream); finer
   histories would need periodic held-out evaluation during the stream.
-- Not implemented: temporal-dynamics shifts (e.g. latency jitter, changed `T`), event
-  data, a hyperparameter-search utility with a test-role guard (no tuning utility
-  exists yet; protocols check split roles instead), multi-seed aggregation/reporting.
+- Latency jitter (max 10 steps) barely affects the tiny reference: with rate coding and
+  a rate readout, spike timing carries little information. Under latency encoding the
+  tiny config does not learn at all (pretrain ~0.32), so temporal shifts cannot yet be
+  shown to matter; a timing-sensitive setup needs model/encoding tuning (later work).
+- Not implemented: event data, a hyperparameter-search utility with a test-role guard
+  (no tuning utility exists yet; protocols check split roles instead), multi-seed
+  aggregation/reporting (planned right after Phase 4).
 
 ## Known limitations
 

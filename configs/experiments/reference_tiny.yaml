@@ -49,7 +49,7 @@ stream:  # prequential: predict each minibatch, then adapt on it
   window: 64
   q_target: 0.8
 shift:
-  kind: noise  # noise | intensity | label_permutation
+  kind: noise  # noise | intensity | label_permutation | latency_jitter (magnitude = max delay steps)
   magnitude: 0.3
   seed: 0
   schedule:
