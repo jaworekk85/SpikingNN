@@ -4,10 +4,10 @@ Updated: 2026-10-12 (Europe/Warsaw).
 
 ## Current phase
 
-**Phase 4 — efficiency accounting: complete, awaiting review.**
-Phases 0–2 were accepted on 2026-10-11 and Phase 3 (with the latency-jitter addition)
-on 2026-10-12. No Phase 5 work has started. Agreed next step after review: multi-seed
-reporting (figure + metrics table), then Phase 5.
+**Multi-seed reporting (between Phases 4 and 5): complete, awaiting review.**
+Phases 0–2 were accepted on 2026-10-11; Phase 3 (with latency jitter) and Phase 4 on
+2026-10-12 (Phase 4: committed and pushed on request, then reporting requested).
+No Phase 5 work has started.
 
 ## Done
 
@@ -92,9 +92,30 @@ reporting (figure + metrics table), then Phase 5.
   clean test sample after pretraining, with `proxy_assumptions`; adaptation energy proxy
   as separate metrics; `model.n_synapses` added.
 
+### Reporting (agreed step between Phases 4 and 5)
+- `reporting.compare`: `load_records`, `check_comparable` (refuses differing `T`,
+  encoding, model size or protocol unless `allow_mismatch=True`, which lists them),
+  `aggregate` over seeds per condition, `summarize` (mean, sample std, counts of
+  unavailable values), Markdown `metrics_table`.
+- `reporting.figures.reference_figure`: stream accuracy around the shift (trailing
+  window, mean over seeds, shift window shaded) and test accuracy vs synaptic operations
+  (seeds + ringed mean). Colorblind-validated categorical order, legend plus direct
+  labels, matplotlib object-oriented API (no GUI backend). Max three conditions.
+- `reporting.report.write_report`: new immutable `report_<UTC>_<hash>/` directory with
+  `report.md`, `figure.png`, `summary.json`; states comparability, shift, code versions
+  and energy-proxy assumptions.
+- Per-layer synaptic operations (`synops/<layer>`, `synops/readout`) in evaluation.
+- Reference: `--rule all` and `--report`; `experiments/reference/report.py` for saved runs.
+- `matplotlib>=3.7` added to the package dependencies (`pyproject.toml`).
+
 ## Validation
 
-- Local: Python 3.12.3, PyTorch 2.14.1+cpu, `pytest`: 61 passed in ~12 s.
+- Local: Python 3.12.3, PyTorch 2.14.1+cpu, matplotlib 3.11.2, `pytest`: 65 passed in
+  ~16 s. A fresh virtual environment installed from `pyproject.toml` (CPU wheels) also
+  passes the suite.
+- Reporting tests: comparability guard (refusal and allowed mismatch listing), seed
+  aggregation with unavailable values, table formatting, trailing mean, report directory
+  contents and non-overwriting; the reference CLI writes runs and a report.
 - Phase 4 tests: conv fan-out equals brute-force counting (odd/even sizes, with and
   without padding); dense fan-out and synapse count; synops = spikes x fan-out with
   direct input counted as MACs instead; energy-proxy arithmetic and assumption fields;
@@ -194,7 +215,7 @@ reporting (figure + metrics table), then Phase 5.
   (no tuning utility exists yet; protocols check split roles instead), multi-seed
   aggregation/reporting (planned right after Phase 4).
 
-## Open questions (Phase 4, for review)
+## Phase 4 notes (accepted)
 
 - Energy proxy defaults are arithmetic-only 45 nm FP32 costs; memory access is excluded
   and would likely dominate. A memory-aware or target-hardware model (e.g. SpiNNaker2
@@ -206,9 +227,19 @@ reporting (figure + metrics table), then Phase 5.
   traces are not implemented. STDP now clips weights to `w_max` at binding (previously
   on its first update), which slightly changed one STDP seed (0.914 -> 0.906).
 
+## Open questions (reporting, for review)
+
+- The tiny reference shows the expected shape (drop during the shift, partial recovery;
+  BPTT highest quality; three-factor most spikes) but with 2 seeds and synthetic data it
+  is pipeline validation only. More seeds are a config change (`seeds:`).
+- Synops are dominated by input spikes into layer0 (~4,830 of ~5,000 per sample), so the
+  per-layer table is where rule differences show (readout synops 112 / 290 / 614 for
+  STDP / BPTT / three-factor).
+- No quality-matched or Pareto comparison yet (the pilot asks for one); the
+  accuracy-vs-synops panel is the starting point.
+
 ## Known limitations
 
-- No reporting (comparison guards, figures, tables) yet.
 
 ## Scientific caveats
 
@@ -222,6 +253,5 @@ reporting (figure + metrics table), then Phase 5.
 
 ## Next phase, after review
 
-Multi-seed reporting (aggregation, comparison guards, reference figure and metrics
-table), then Phase 5: document hardware constraints, flesh out the `HardwareBackend`
-interface, export of model + rule description (no hardware-specific implementation).
+Phase 5: document hardware constraints, flesh out the `HardwareBackend` interface,
+export of model + rule description (no hardware-specific implementation).

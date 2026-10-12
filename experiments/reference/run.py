@@ -6,14 +6,15 @@
 3. Clean and shifted test accuracy again; forgetting of the clean condition.
 4. Operation counts and an energy *proxy* (explicit assumptions in ``energy``) for
    test inference and, separately, for adaptation during the shift window.
-One RunRecord per seed.
+One RunRecord per seed. ``--rule all`` runs every rule; ``--report`` then writes a
+multi-seed comparison report (tables + figure) for the runs just made.
 
 Rules: ``surrogate_bptt`` (global gradient), ``three_factor`` (error-modulated,
 all layers) or ``stdp`` (STDP on hidden layers + three-factor delta rule on the
 readout, since unsupervised STDP alone cannot learn labels).
 Pipeline validation only; the numbers are not research results.
 
-    python experiments/reference/run.py --config configs/experiments/reference_tiny.yaml [--rule stdp]
+    python experiments/reference/run.py --config configs/experiments/reference_tiny.yaml --rule all --report
 """
 
 from __future__ import annotations
@@ -40,11 +41,40 @@ from snn_research.neurons import LIFParams
 from snn_research.metrics import forgetting, synapse_count
 from snn_research.protocols import OfflineConfig, PrequentialConfig, evaluate, run_offline, run_prequential
 from snn_research.records import RunRecord, save_run
+from snn_research.reporting import load_records, write_report
 from snn_research.shifts import ShiftConfig
 from snn_research.utils import load_config, provenance, resolved, seed_everything
 
 
 RULES = ("surrogate_bptt", "three_factor", "stdp")
+
+REPORT_TABLES = {
+    "Quality and adaptation": [
+        ("pretrain test acc", "pretrain/test/accuracy", 3),
+        ("stream before", "stream/shift0/quality_before", 3),
+        ("stream during", "stream/shift0/quality_during", 3),
+        ("stream after", "stream/shift0/quality_after", 3),
+        ("recovery (samples)", "stream/shift0/recovery_samples", 0),
+        ("clean test after stream", "test_clean/after_stream", 3),
+        ("forgetting (clean)", "test_clean/forgetting", 3),
+        ("shifted test after stream", "test_shifted/after_stream", 3),
+    ],
+    "Activity and inference cost (per test sample, after pretraining)": [
+        ("spike rate", "pretrain/test/overall/spike_rate", 3),
+        ("spikes", "pretrain/test/spikes_per_sample", 0),
+        ("synops", "pretrain/test/synops_per_sample", 0),
+        ("synops into layer0 (input)", "pretrain/test/synops_per_sample/layer0", 0),
+        ("synops into readout", "pretrain/test/synops_per_sample/readout", 0),
+        ("energy proxy (pJ)", "pretrain/test/energy_proxy_per_sample/total_pj", 0),
+    ],
+    "Adaptation cost (shift window, separate fields)": [
+        ("update steps", "stream/shift0/adaptation_updates", 0),
+        ("weights written", "stream/shift0/adaptation_weights_written", 0),
+        ("spikes", "stream/shift0/adaptation_spikes", 0),
+        ("synops", "stream/shift0/adaptation_synops", 0),
+        ("energy proxy (pJ)", "stream/shift0/adaptation_energy_proxy/total_pj", 0),
+    ],
+}
 
 
 @dataclass(frozen=True)
@@ -160,25 +190,34 @@ def main(argv: list[str] | None = None) -> list[Path]:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--results", type=Path, default=Path("results"))
-    parser.add_argument("--rule", choices=RULES, help="override the configured rule")
+    parser.add_argument("--rule", choices=(*RULES, "all"), help="override the configured rule; 'all' runs each")
+    parser.add_argument("--report", action="store_true", help="write a comparison report for these runs")
     args = parser.parse_args(argv)
 
-    config = load_config(ReferenceConfig, args.config)
-    if args.rule:
-        config = replace(config, rule=args.rule)  # saved in the resolved config
+    base = load_config(ReferenceConfig, args.config)
+    rules = RULES if args.rule == "all" else [args.rule or base.rule]
     run_dirs = []
-    for seed in config.seeds:
-        record = run_seed(config, seed)
-        run_dir = save_run(record, args.results)
-        run_dirs.append(run_dir)
-        m = record.metrics
-        print(f"{config.rule} seed {seed}: pretrain test {m['pretrain/test/accuracy']:.3f} | stream "
-              f"before/during/after {m['stream/shift0/quality_before']:.3f}/"
-              f"{m['stream/shift0/quality_during']:.3f}/{m['stream/shift0/quality_after']:.3f}, "
-              f"recovery {m['stream/shift0/recovery_samples']} | clean test after "
-              f"{m['test_clean/after_stream']:.3f} | synops/sample {m['pretrain/test/synops_per_sample']:.0f}, "
-              f"proxy {record.energy_proxy:.0f} pJ/sample -> {run_dir}")
+    for rule in rules:
+        config = replace(base, rule=rule)  # saved in the resolved config
+        for seed in config.seeds:
+            record = run_seed(config, seed)
+            run_dir = save_run(record, args.results)
+            run_dirs.append(run_dir)
+            report_line(config.rule, seed, record, run_dir)
+    if args.report:
+        report_dir = write_report(load_records(run_dirs), args.results, REPORT_TABLES)
+        print(f"report -> {report_dir / 'report.md'}")
     return run_dirs
+
+
+def report_line(rule: str, seed: int, record: RunRecord, run_dir: Path) -> None:
+    m = record.metrics
+    print(f"{rule} seed {seed}: pretrain test {m['pretrain/test/accuracy']:.3f} | stream "
+          f"before/during/after {m['stream/shift0/quality_before']:.3f}/"
+          f"{m['stream/shift0/quality_during']:.3f}/{m['stream/shift0/quality_after']:.3f}, "
+          f"recovery {m['stream/shift0/recovery_samples']} | clean test after "
+          f"{m['test_clean/after_stream']:.3f} | synops/sample {m['pretrain/test/synops_per_sample']:.0f}, "
+          f"proxy {record.energy_proxy:.0f} pJ/sample -> {run_dir}")
 
 
 if __name__ == "__main__":

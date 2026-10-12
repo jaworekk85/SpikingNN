@@ -45,15 +45,19 @@ def synapse_count(model: nn.Module, observations: dict) -> int:
 
 
 def synaptic_operations(model: nn.Module, observations: dict, input_is_spikes: bool) -> dict[str, torch.Tensor]:
-    """Per-sample ``synops`` and ``input_macs`` (``[batch]`` tensors) for one forward pass."""
+    """Per-sample counts (``[batch]`` tensors) for one forward pass: totals ``synops`` and
+    ``input_macs``, plus ``synops/<layer>`` for the synapses into each layer and
+    ``synops/readout``."""
     batch = next(iter(observations.values())).spikes.shape[1]
-    synops, input_macs = torch.zeros(batch), torch.zeros(batch)
-    for i, (layer, obs) in enumerate(zip(model.layers, observations.values())):
+    counts = {"synops": torch.zeros(batch), "input_macs": torch.zeros(batch)}
+    for i, (name, layer, obs) in enumerate(zip(observations, model.layers, observations.values())):
         fan = fan_out(layer, tuple(obs.pre.shape[2:]))
         if i == 0 and not input_is_spikes:
-            input_macs += ((obs.pre != 0) * fan).flatten(2).sum((0, 2))
+            counts["input_macs"] += ((obs.pre != 0) * fan).flatten(2).sum((0, 2))
+            counts[f"synops/{name}"] = torch.zeros(batch)
         else:
-            synops += (obs.pre * fan).flatten(2).sum((0, 2))
+            counts[f"synops/{name}"] = (obs.pre * fan).flatten(2).sum((0, 2))
     last = list(observations.values())[-1]
-    synops += last.spikes.flatten(2).sum((0, 2)) * model.readout.out_features
-    return {"synops": synops, "input_macs": input_macs}
+    counts["synops/readout"] = last.spikes.flatten(2).sum((0, 2)) * model.readout.out_features
+    counts["synops"] = sum(v for k, v in counts.items() if k.startswith("synops/"))
+    return counts

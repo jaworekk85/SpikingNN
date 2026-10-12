@@ -34,7 +34,7 @@ def evaluate(model, split: Split, encoding: EncodingConfig, batch_size: int, gen
     """
     logits, labels = [], []
     layer_spikes: dict[str, list[torch.Tensor]] = {}
-    ops = {"synops": 0.0, "input_macs": 0.0}
+    ops: dict[str, float] = {}
     shift_generators = [torch.Generator().manual_seed(s.seed + 1) for s in shifts]
     with torch.no_grad():
         for x, y in split.batches(batch_size):
@@ -46,16 +46,21 @@ def evaluate(model, split: Split, encoding: EncodingConfig, batch_size: int, gen
             for name, obs in observations.items():
                 layer_spikes.setdefault(name, []).append(obs.spikes)
             for key, value in synaptic_operations(model, observations, encoding.kind != "direct").items():
-                ops[key] += value.sum().item()
+                ops[key] = ops.get(key, 0.0) + value.sum().item()
     spikes = {name: torch.cat(s, dim=1) for name, s in layer_spikes.items()}
     n = len(split.y)
     per_sample = {
         "spikes_per_sample": sum(s.sum().item() for s in spikes.values()) / n,
-        "synops_per_sample": ops["synops"] / n,
-        "input_macs_per_sample": ops["input_macs"] / n,
+        **{_per_sample(key): value / n for key, value in ops.items()},
         "neuron_updates_per_sample": float(sum(s[:, 0].numel() for s in spikes.values())),
     }
     return {"accuracy": accuracy(torch.cat(logits), torch.cat(labels)), **activity_summary(spikes), **per_sample}
+
+
+def _per_sample(key: str) -> str:
+    """``synops`` -> ``synops_per_sample``; ``synops/layer0`` -> ``synops_per_sample/layer0``."""
+    total, _, part = key.partition("/")
+    return f"{total}_per_sample" + (f"/{part}" if part else "")
 
 
 def forward_and_learn(model, rules: Sequence, inputs: torch.Tensor, y: torch.Tensor, learn: bool = True):

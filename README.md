@@ -3,13 +3,14 @@
 Zaczątek frameworka badawczego do spiking neural networks (SNN), lokalnych reguł
 uczenia oraz adaptacji do niestacjonarnych strumieni danych.
 
-**Stan: faza 4 — efektywność, czeka na przegląd.** Pakiet zawiera referencyjny
+**Stan: fazy 0–4 gotowe, raporty porównawcze czekają na przegląd; dalej faza 5.** Pakiet zawiera referencyjny
 neuron LIF, enkodery, małe sieci MLP/conv, trzy reguły uczenia (surrogate BPTT, STDP,
 reguła trójczynnikowa ze śladami uprawnień), seedowane zmiany danych z harmonogramem,
 protokoły offline / prequential / sekwencja zadań, metryki aktywności i adaptacji,
 liczenie operacji synaptycznych, proxy energii z jawnymi założeniami, opcjonalną
-ograniczoną precyzję wag oraz niezmienny zapis wyników. Proxy energii to oszacowanie,
-nie pomiar.
+ograniczoną precyzję wag, niezmienny zapis wyników oraz raporty porównawcze z wielu
+seedów (tabele, wykres, blokada porównań runów o różnych ustawieniach). Proxy energii
+to oszacowanie, nie pomiar.
 
 - [Specyfikacja projektu](SNN_AGENT_RESEARCH_SPEC.md)
 - [Architektura, kontrakty i zależności](docs/research_framework.md)
@@ -27,14 +28,25 @@ python -m venv .venv
 
 ## Eksperyment referencyjny
 
-Małe, syntetyczne dane, CPU, kilka sekund. Służy walidacji pipeline'u, nie jest
+Małe, syntetyczne dane, CPU, kilkanaście sekund. Służy walidacji pipeline'u, nie jest
 wynikiem badawczym. Każde ziarno zapisuje nowy katalog w `results/`.
 
+Wszystkie trzy reguły i raport porównawczy (tabele + wykres) jednym poleceniem:
+
 ```powershell
-.\.venv\Scripts\python.exe experiments\reference\run.py --config configs\experiments\reference_tiny.yaml
-.\.venv\Scripts\python.exe experiments\reference\run.py --config configs\experiments\reference_tiny.yaml --rule three_factor
-.\.venv\Scripts\python.exe experiments\reference\run.py --config configs\experiments\reference_tiny.yaml --rule stdp
+.\.venv\Scripts\python.exe experiments\reference\run.py --config configs\experiments\reference_tiny.yaml --rule all --report
 ```
+
+Raport trafia do nowego katalogu `results\reference_tiny\report_<czas>_<hash>\`
+(`report.md`, `figure.png`, `summary.json`). Pojedyncza reguła: `--rule three_factor`
+(lub `stdp`, `surrogate_bptt`). Raport z wcześniej zapisanych runów:
+
+```powershell
+.\.venv\Scripts\python.exe experiments\reference\report.py results\reference_tiny
+```
+
+Runy o różnym `T`, kodowaniu, rozmiarze modelu lub protokole nie zostaną porównane,
+chyba że dodasz `--allow-mismatch` (różnice pojawią się wtedy w raporcie).
 
 ## Struktura
 

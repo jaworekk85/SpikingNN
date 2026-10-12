@@ -46,8 +46,9 @@ def run_prequential(model, rules: Sequence, stream: Stream, encoding: EncodingCo
         logits, observations, _, written = forward_and_learn(model, rules, inputs, y, learn=config.adapt)
         correct += (logits.argmax(-1) == y).float().tolist()
         cost["spikes"] += sum(obs.spikes.flatten(2).sum((0, 2)) for obs in observations.values()).tolist()
-        for key, value in synaptic_operations(model, observations, encoding.kind != "direct").items():
-            cost[key] += value.tolist()
+        ops = synaptic_operations(model, observations, encoding.kind != "direct")
+        cost["synops"] += ops["synops"].tolist()
+        cost["input_macs"] += ops["input_macs"].tolist()
         if config.adapt:
             updates.append((int(index[0]), written))
 

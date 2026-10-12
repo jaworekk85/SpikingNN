@@ -23,9 +23,11 @@ def load_reference():
 reference = load_reference()
 
 
-def test_reference_cli_writes_one_record_per_seed(tmp_path):
-    run_dirs = reference.main(["--config", str(CONFIG), "--results", str(tmp_path)])
+def test_reference_cli_writes_one_record_per_seed_and_a_report(tmp_path):
+    run_dirs = reference.main(["--config", str(CONFIG), "--results", str(tmp_path), "--report"])
     assert len(run_dirs) == 2
+    (report_dir,) = (tmp_path / "reference_tiny").glob("report_*")
+    assert {p.name for p in report_dir.iterdir()} == {"report.md", "figure.png", "summary.json"}
     record = json.loads((run_dirs[0] / "record.json").read_text())
     loss = record["traces"]["pretrain/train_loss"]
     assert loss[-1] < loss[0]

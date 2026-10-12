@@ -16,7 +16,7 @@ authorize experiments. Stop for review before Phase 1.
 | pytest | Tiny CPU dynamics, invariants and smoke tests | Phase 1 |
 | torchvision | Optional MNIST/Fashion-MNIST access; cached downloads | When first needed |
 | snnTorch | Single optional surrogate-gradient adapter | When first needed |
-| matplotlib | Reference figure generation | When reporting is implemented |
+| matplotlib | Reference figure generation (object-oriented API, no GUI backend) | Reporting (after Phase 4) |
 
 The Phase 0 runtime has no third-party dependencies. Add dependencies when code
 uses them; record their resolved versions in each run. No Hydra, simulator registry,

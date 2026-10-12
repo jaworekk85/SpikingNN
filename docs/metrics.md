@@ -67,4 +67,7 @@ and learning-update operations (weights written) are counted separately, as abov
 Report pre/during/post quality for every shift, with explicit windows. Forgetting
 and adaptation are separate metrics. Energy proxies cannot be described as measured
 energy. Comparisons require matching `T`, neuron/synapse counts, encoding and protocol,
-or explicit mismatch disclosure.
+or explicit mismatch disclosure (`reporting.check_comparable`; `allow_mismatch=True`
+lists the mismatches in the report). Reports give mean ± sample standard deviation
+over seeds and count unavailable values (e.g. unrecovered) instead of dropping them
+silently.

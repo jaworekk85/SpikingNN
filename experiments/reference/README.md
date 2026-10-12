@@ -6,8 +6,13 @@ offline pretraining -> prequential stream with one seeded, scheduled shift (pre-
 -> shift -> post-shift, online adaptation) -> clean and shifted test accuracy ->
 synaptic operations and an energy proxy with explicit assumptions -> one `RunRecord`
 per seed. The rule is chosen by `rule:` in the config or
-`--rule surrogate_bptt | three_factor | stdp`. Multi-seed reporting (figure and metrics
-table) comes next; MNIST/event data later.
+`--rule surrogate_bptt | three_factor | stdp | all`. `--report` (or `report.py` on saved
+runs) writes a multi-seed comparison into a new `report_<UTC>_<hash>/` directory:
+`report.md` (quality/adaptation, activity/inference cost and adaptation cost tables,
+mean ± sample std over seeds, energy-proxy assumptions), `figure.png` (stream quality
+around the shift; test accuracy vs synaptic operations) and `summary.json`. Runs with
+different `T`, encoding, model size or protocol are refused unless `--allow-mismatch`.
+MNIST/event data come later.
 
 The complete planned reference uses a small LIF MLP, rate-encoded MNIST
 or a tiny event-data subset, surrogate BPTT and one local/three-factor rule, a

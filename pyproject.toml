@@ -12,6 +12,7 @@ dependencies = [
     "torch>=2.4",
     "numpy",
     "pyyaml>=6",
+    "matplotlib>=3.7",
 ]
 
 [project.optional-dependencies]
