@@ -14,7 +14,8 @@ The modulator is the output error ``onehot(label) - softmax(logits)``. The reado
 (non-spiking, on time-averaged spike rates) uses it directly with eligibility equal to
 its input rate, i.e. the delta rule. Each hidden layer receives the error broadcast
 through a fixed random feedback matrix (no transported weights or backpropagated
-gradients). Updates are averaged over the batch; biases are not updated.
+gradients). Updates are averaged over the batch; biases are not updated. Optional
+``w_max`` clipping and ``weight_bits`` fixed-point precision apply to all bound weights.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ import torch
 
 from .base import LocalObservation, linear_synapses, local_observation
 from .declaration import RuleDeclaration
+from .precision import check_precision, constrain_
 
 
 @dataclass(frozen=True)
@@ -37,10 +39,15 @@ class ThreeFactorConfig:
     tau_eligibility_ms: float = 20.0
     pseudo_slope: float = 5.0
     train_hidden: bool = True
+    w_max: float = 0.0  # 0 = unbounded
+    weight_bits: int = 0  # 0 = full precision; needs w_max > 0
 
     def __post_init__(self) -> None:
         if min(self.lr, self.readout_lr, self.tau_pre_ms, self.tau_eligibility_ms, self.pseudo_slope) <= 0:
             raise ValueError("three-factor parameters must be positive")
+        if self.w_max < 0:
+            raise ValueError("w_max must be non-negative")
+        check_precision(self.weight_bits, self.w_max)
 
 
 def eligibility_traces(obs: LocalObservation, config: ThreeFactorConfig, dt_ms: float,
@@ -89,6 +96,8 @@ class ThreeFactor:
             name: torch.randn(syn.out_features, n_classes) / math.sqrt(n_classes)
             for name, syn in self.synapses.items()
         }
+        for synapse in [self.readout, *self.synapses.values()]:
+            constrain_(synapse.weight, self.config.weight_bits, self.config.w_max)
 
     @torch.no_grad()
     def step(self, model, layer_states, modulators: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
@@ -107,6 +116,7 @@ class ThreeFactor:
         for name, dw in updates.items():
             synapse = self.readout if name == "readout" else self.synapses[name]
             synapse.weight.add_(dw)
+            constrain_(synapse.weight, self.config.weight_bits, self.config.w_max)
 
     def reset(self) -> None:
         """Traces are per-sample; feedback weights are fixed. Nothing to clear."""

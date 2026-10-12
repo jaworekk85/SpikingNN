@@ -7,7 +7,8 @@ For presynaptic trace ``x`` and postsynaptic trace ``y`` (decay per step
 
 so a pre spike ``d >= 0`` steps before a post spike gives ``+a_plus exp(-d dt/tau_plus)``
 and a post spike ``d > 0`` steps before a pre spike gives ``-a_minus exp(-d dt/tau_minus)``.
-Updates are averaged over the batch; weights are clipped to ``[-w_max, w_max]``.
+Updates are averaged over the batch; weights are clipped to ``[-w_max, w_max]`` and,
+with ``weight_bits`` > 0, kept at that fixed-point precision (see ``precision``).
 Traces start at zero for every sample.
 """
 
@@ -20,6 +21,7 @@ import torch
 
 from .base import LocalObservation, linear_synapses, local_observation
 from .declaration import RuleDeclaration
+from .precision import check_precision, constrain_
 
 
 @dataclass(frozen=True)
@@ -29,10 +31,12 @@ class STDPConfig:
     tau_plus_ms: float = 10.0
     tau_minus_ms: float = 10.0
     w_max: float = 1.0
+    weight_bits: int = 0  # 0 = full precision
 
     def __post_init__(self) -> None:
         if min(self.a_plus, self.a_minus) < 0 or min(self.tau_plus_ms, self.tau_minus_ms, self.w_max) <= 0:
             raise ValueError("STDP amplitudes must be non-negative and time constants/w_max positive")
+        check_precision(self.weight_bits, self.w_max)
 
 
 def stdp_update(obs: LocalObservation, config: STDPConfig, dt_ms: float) -> torch.Tensor:
@@ -68,6 +72,8 @@ class STDP:
     def init_state(self, model) -> None:
         self.synapses = linear_synapses(model)
         self.dt_ms = model.lif.params.dt_ms
+        for synapse in self.synapses.values():
+            constrain_(synapse.weight, self.config.weight_bits, self.config.w_max)
 
     @torch.no_grad()
     def step(self, model, layer_states, modulators) -> dict[str, torch.Tensor]:
@@ -78,7 +84,8 @@ class STDP:
     def apply(self, updates: dict[str, torch.Tensor]) -> None:
         for name, dw in updates.items():
             weight = self.synapses[name].weight
-            weight.add_(dw).clamp_(-self.config.w_max, self.config.w_max)
+            weight.add_(dw)
+            constrain_(weight, self.config.weight_bits, self.config.w_max)
 
     def reset(self) -> None:
         """Traces are per-sample and already start at zero; nothing persists."""

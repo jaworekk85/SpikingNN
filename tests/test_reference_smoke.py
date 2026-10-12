@@ -29,7 +29,10 @@ def test_reference_cli_writes_one_record_per_seed(tmp_path):
     record = json.loads((run_dirs[0] / "record.json").read_text())
     loss = record["traces"]["pretrain/train_loss"]
     assert loss[-1] < loss[0]
-    assert record["energy_proxy"] is None and record["energy_j"] is None
+    assert record["energy_j"] is None  # simulation: proxy only, never measured energy
+    assert record["energy_proxy"] > 0 and record["proxy_assumptions"]["kind"].startswith("proxy")
+    assert record["model"]["n_synapses"] > 0
+    assert record["metrics"]["stream/shift0/adaptation_energy_proxy/total_pj"] > 0
     assert record["shift"]["kind"] == "noise" and len(record["traces"]["stream/correct"]) == 768
     for phase in ("before", "during", "after"):  # pre/during/post-shift quality always reported
         assert f"stream/shift0/quality_{phase}" in record["metrics"]

@@ -44,6 +44,13 @@ updates are per sample/minibatch, not per timestep.
 
 Neither local rule updates biases. Convolutional synapses stay fixed under local rules.
 
+**Bounded precision (optional, Phase 4).** Both local rules accept `weight_bits` and a
+bound (`w_max`): bound weights are clipped to `[-w_max, w_max]` and rounded to the
+nearest of `2**bits - 1` symmetric fixed-point levels at binding and after every update
+(`learning_rules/precision.py`). Rounding is deterministic round-to-nearest, so updates
+below half a step are lost; stochastic rounding and bounded-precision traces are not
+implemented. `ThreeFactor` needs `w_max > 0` to quantize (default: unbounded).
+
 ## Verified properties (tests/test_learning_rules.py)
 
 - STDP window sign and exponential shape on toy spike pairs.

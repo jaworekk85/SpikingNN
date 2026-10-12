@@ -1,1 +1,5 @@
-"""Placeholder for energy proxies with explicit assumptions (Phase 4)."""
+"""Energy proxies with explicit assumptions (never measured energy)."""
+
+from .proxy import EnergyProxyConfig, energy_proxy_pj
+
+__all__ = ["EnergyProxyConfig", "energy_proxy_pj"]

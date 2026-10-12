@@ -1,7 +1,7 @@
 # Test plan
 
 Run with `python -m pytest -q`. All tests use CPU and tiny synthetic data and must
-run well under one minute (Phases 1–3 suite: ~15 s).
+run well under one minute (Phases 1–4 suite: ~15 s).
 
 - Phase 1: analytic LIF response, threshold/reset/refractory, deterministic encoding,
   activity metrics, record schema and immutable-store checks, synthetic smoke run.

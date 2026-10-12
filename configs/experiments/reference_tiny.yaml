@@ -33,12 +33,15 @@ three_factor:
   tau_eligibility_ms: 20.0
   pseudo_slope: 5.0
   train_hidden: true
+  w_max: 0.0  # 0 = unbounded
+  weight_bits: 0  # 0 = full precision; e.g. 8 with w_max > 0 for fixed-point weights
 stdp:
   a_plus: 0.001
   a_minus: 0.00105
   tau_plus_ms: 10.0
   tau_minus_ms: 10.0
   w_max: 1.0
+  weight_bits: 0
 pretrain:
   epochs: 5
   batch_size: 32
@@ -58,3 +61,9 @@ shift:
     end: 512
     steps: 4
     period: 64
+energy:  # proxy coefficients (pJ per operation); arithmetic only, not measured energy
+  pj_per_synop: 0.9
+  pj_per_mac: 4.6
+  pj_per_neuron_update: 0.0
+  pj_per_weight_update: 0.0
+  source: "Horowitz ISSCC 2014 / Han et al. 2015: 45 nm FP32 arithmetic only, no memory access"

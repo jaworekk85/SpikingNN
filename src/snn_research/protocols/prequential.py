@@ -15,7 +15,7 @@ import torch
 
 from ..datasets import Stream
 from ..encoding import EncodingConfig
-from ..metrics import phase_quality, recovery_samples
+from ..metrics import phase_quality, recovery_samples, synaptic_operations
 from .offline import forward_and_learn
 
 
@@ -37,16 +37,19 @@ class PrequentialConfig:
 def run_prequential(model, rules: Sequence, stream: Stream, encoding: EncodingConfig,
                     config: PrequentialConfig, generator: torch.Generator) -> dict:
     """Per-sample traces and, for each shift ``k``, phase quality, recovery and
-    adaptation cost (updates and spikes inside the ``during`` window, reported apart)."""
+    adaptation cost inside the ``during`` window: update steps, weights written, spikes,
+    synaptic operations and input MACs, each reported as its own field."""
     correct: list[float] = []
-    spikes: list[float] = []
-    update_at: list[int] = []
+    cost: dict[str, list[float]] = {"spikes": [], "synops": [], "input_macs": []}
+    updates: list[tuple[int, int]] = []  # (first stream index of the batch, weights written)
     for index, inputs, y in stream.batches(config.batch_size, encoding, generator):
-        logits, observations, _ = forward_and_learn(model, rules, inputs, y, learn=config.adapt)
+        logits, observations, _, written = forward_and_learn(model, rules, inputs, y, learn=config.adapt)
         correct += (logits.argmax(-1) == y).float().tolist()
-        spikes += sum(obs.spikes.flatten(2).sum((0, 2)) for obs in observations.values()).tolist()
+        cost["spikes"] += sum(obs.spikes.flatten(2).sum((0, 2)) for obs in observations.values()).tolist()
+        for key, value in synaptic_operations(model, observations, encoding.kind != "direct").items():
+            cost[key] += value.tolist()
         if config.adapt:
-            update_at.append(int(index[0]))
+            updates.append((int(index[0]), written))
 
     metrics: dict[str, float | None] = {"quality": sum(correct) / len(correct)}
     for k, shift in enumerate(stream.shifts):
@@ -54,7 +57,11 @@ def run_prequential(model, rules: Sequence, stream: Stream, encoding: EncodingCo
         for phase, q in phase_quality(correct, s).items():
             metrics[f"shift{k}/quality_{phase}"] = q
         metrics[f"shift{k}/recovery_samples"] = recovery_samples(correct, s, config.q_target, config.window)
-        metrics[f"shift{k}/adaptation_updates"] = sum(s.start <= i < s.end for i in update_at)
-        metrics[f"shift{k}/adaptation_spikes"] = sum(spikes[s.start : s.end])
-    traces = {"correct": correct, "spikes_per_sample": spikes, "update_at": [float(i) for i in update_at]}
+        in_window = [w for i, w in updates if s.start <= i < s.end]
+        metrics[f"shift{k}/adaptation_updates"] = len(in_window)
+        metrics[f"shift{k}/adaptation_weights_written"] = sum(in_window)
+        for key, values in cost.items():
+            metrics[f"shift{k}/adaptation_{key}"] = sum(values[s.start : s.end])
+    traces = {"correct": correct, **{f"{key}_per_sample": v for key, v in cost.items()},
+              "update_at": [float(i) for i, _ in updates]}
     return {"traces": traces, "metrics": metrics}

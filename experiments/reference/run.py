@@ -4,6 +4,8 @@
 2. Prequential stream with one scheduled shift (pre-shift -> shift -> post-shift),
    adapting online with the same rule(s) unless ``stream.adapt`` is false.
 3. Clean and shifted test accuracy again; forgetting of the clean condition.
+4. Operation counts and an energy *proxy* (explicit assumptions in ``energy``) for
+   test inference and, separately, for adaptation during the shift window.
 One RunRecord per seed.
 
 Rules: ``surrogate_bptt`` (global gradient), ``three_factor`` (error-modulated,
@@ -24,6 +26,7 @@ import torch
 
 from snn_research.datasets import Stream, SyntheticConfig, synthetic_prototypes
 from snn_research.encoding import EncodingConfig
+from snn_research.energy import EnergyProxyConfig, energy_proxy_pj
 from snn_research.learning_rules import (
     STDP,
     STDPConfig,
@@ -34,7 +37,7 @@ from snn_research.learning_rules import (
 )
 from snn_research.models import ModelConfig, build_model, count_neurons
 from snn_research.neurons import LIFParams
-from snn_research.metrics import forgetting
+from snn_research.metrics import forgetting, synapse_count
 from snn_research.protocols import OfflineConfig, PrequentialConfig, evaluate, run_offline, run_prequential
 from snn_research.records import RunRecord, save_run
 from snn_research.shifts import ShiftConfig
@@ -60,6 +63,7 @@ class ReferenceConfig:
     pretrain: OfflineConfig = field(default_factory=OfflineConfig)
     stream: PrequentialConfig = field(default_factory=PrequentialConfig)
     shift: ShiftConfig = field(default_factory=ShiftConfig)
+    energy: EnergyProxyConfig = field(default_factory=EnergyProxyConfig)
 
     def __post_init__(self) -> None:
         if self.rule not in RULES:
@@ -112,6 +116,20 @@ def run_seed(config: ReferenceConfig, seed: int) -> RunRecord:
 
     with torch.no_grad():
         _, observations = model(train.x[:1].unsqueeze(0))
+    n_neurons = count_neurons(observations)
+    ops = pretrain["test"]
+    inference = energy_proxy_pj(config.energy, synops=ops["synops_per_sample"], macs=ops["input_macs_per_sample"],
+                                neuron_updates=ops["neuron_updates_per_sample"])
+    metrics.update({f"pretrain/test/energy_proxy_per_sample/{k}": v for k, v in inference.items()})
+    window = config.shift.schedule.end - config.shift.schedule.start
+    adaptation = energy_proxy_pj(
+        config.energy,
+        synops=metrics["stream/shift0/adaptation_synops"],
+        macs=metrics["stream/shift0/adaptation_input_macs"],
+        neuron_updates=n_neurons * config.encoding.T * window,
+        weight_updates=metrics["stream/shift0/adaptation_weights_written"],
+    )
+    metrics.update({f"stream/shift0/adaptation_energy_proxy/{k}": v for k, v in adaptation.items()})
     return RunRecord(
         experiment=config.experiment,
         config=resolved(config),
@@ -121,7 +139,8 @@ def run_seed(config: ReferenceConfig, seed: int) -> RunRecord:
         rule_declarations=[asdict(rule.declaration) for rule in rules],
         model={
             "kind": config.model.kind,
-            "n_neurons": count_neurons(observations),
+            "n_neurons": n_neurons,
+            "n_synapses": synapse_count(model, observations),
             "n_weights": sum(p.numel() for n, p in model.named_parameters() if n.endswith("weight")),
         },
         dataset={"version": train.version, "n_train": len(train.y), "n_test": len(test.y),
@@ -131,6 +150,9 @@ def run_seed(config: ReferenceConfig, seed: int) -> RunRecord:
         traces={**{f"pretrain/{k}": v for k, v in pretrain["traces"].items()},
                 **{f"stream/{k}": v for k, v in online["traces"].items()}},
         shift=resolved(config.shift),
+        energy_proxy=inference["total_pj"],
+        proxy_assumptions={**config.energy.assumptions(),
+                           "quantity": "inference energy per clean test sample after pretraining"},
     )
 
 
@@ -154,7 +176,8 @@ def main(argv: list[str] | None = None) -> list[Path]:
               f"before/during/after {m['stream/shift0/quality_before']:.3f}/"
               f"{m['stream/shift0/quality_during']:.3f}/{m['stream/shift0/quality_after']:.3f}, "
               f"recovery {m['stream/shift0/recovery_samples']} | clean test after "
-              f"{m['test_clean/after_stream']:.3f} -> {run_dir}")
+              f"{m['test_clean/after_stream']:.3f} | synops/sample {m['pretrain/test/synops_per_sample']:.0f}, "
+              f"proxy {record.energy_proxy:.0f} pJ/sample -> {run_dir}")
     return run_dirs
 
 

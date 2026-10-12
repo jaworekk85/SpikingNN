@@ -4,9 +4,10 @@ Updated: 2026-10-12 (Europe/Warsaw).
 
 ## Current phase
 
-**Phase 3 — non-stationarity: complete, awaiting review.**
-Phases 0–2 were reviewed and accepted on 2026-10-11 (Phase 2: committed and pushed
-on request, then Phase 3 requested). No Phase 4 work has started.
+**Phase 4 — efficiency accounting: complete, awaiting review.**
+Phases 0–2 were accepted on 2026-10-11 and Phase 3 (with the latency-jitter addition)
+on 2026-10-12. No Phase 5 work has started. Agreed next step after review: multi-seed
+reporting (figure + metrics table), then Phase 5.
 
 ## Done
 
@@ -75,9 +76,31 @@ on request, then Phase 3 requested). No Phase 4 work has started.
   `noise`, magnitude 0.3, samples 256–511 of 768) -> clean/shifted test accuracy.
   `RunRecord.shift` stores the resolved shift; metrics may be `None` (unavailable).
 
+### Phase 4
+- `metrics.synops`: `fan_out` (dense and conv, padding/edge aware), `synapse_count`
+  (logical connections incl. readout), `synaptic_operations` (per-sample synops and,
+  for direct-current input, separate `input_macs`).
+- `energy.EnergyProxyConfig` / `energy_proxy_pj`: per-component proxy in pJ with saved
+  coefficients, units, source and `kind: proxy (not measured)`. Defaults: 0.9 pJ/synop,
+  4.6 pJ/MAC (45 nm FP32 arithmetic only), 0 for neuron and weight updates.
+- `evaluate` reports spikes, synops, input MACs and neuron updates per sample;
+  `forward_and_learn` counts weights written; prequential adaptation cost adds weights
+  written, synops and input MACs (separate fields).
+- `learning_rules.precision`: optional fixed-point weights (`weight_bits`, `w_max`) for
+  STDP and three-factor, applied at binding and after every update.
+- Reference: `energy` config section; `RunRecord.energy_proxy` = inference proxy per
+  clean test sample after pretraining, with `proxy_assumptions`; adaptation energy proxy
+  as separate metrics; `model.n_synapses` added.
+
 ## Validation
 
-- Local: Python 3.12.3, PyTorch 2.14.1+cpu, `pytest`: 52 passed in ~13 s.
+- Local: Python 3.12.3, PyTorch 2.14.1+cpu, `pytest`: 61 passed in ~12 s.
+- Phase 4 tests: conv fan-out equals brute-force counting (odd/even sizes, with and
+  without padding); dense fan-out and synapse count; synops = spikes x fan-out with
+  direct input counted as MACs instead; energy-proxy arithmetic and assumption fields;
+  fixed-point levels and validation; a rule keeps weights on the grid during a stream;
+  adaptation cost counts updates, weights written and synops; reference record carries
+  an energy proxy with assumptions and no measured energy.
 - Phase 3 tests: strengths for all four timings, phases and schedule validation; shift
   kinds at zero/full strength and seeded noise; stream order, index-based shifting and
   `train`-role guard; latency jitter bounds, determinism and post-encoding application
@@ -106,6 +129,12 @@ on request, then Phase 3 requested). No Phase 4 work has started.
   0.89; 64, 64; 0.98/0.99. Three-factor 0.98/0.87; 0.89–0.95 / 0.74–0.78 / 0.79; 186,
   193; 0.96/0.98. STDP + three-factor readout 0.90/0.94; 0.84–0.91 / 0.70–0.78 /
   0.78–0.81; 135, 368; 0.85/0.91. Pipeline validation only, not a rule comparison.
+- Reference tiny run after Phase 4: ~5,000 synops per test sample (mostly input spikes
+  x 32 hidden targets), energy proxy ~4,400–5,000 pJ per sample for all rules. A
+  three-factor precision check (single seeds, `w_max: 8`): full precision 0.98/0.98
+  pretrain test accuracy, 8 bits 0.96/0.99, 6 bits 0.97/0.98, 4 bits 0.78/0.78;
+  `w_max: 2` alone (no quantization) already drops to 0.73/0.84 because readout weights
+  exceed it. Pipeline validation only, not a result.
 - CI runs on every push to `main` (Python 3.11 and 3.12, CPU PyTorch wheels).
 
 ## Decisions
@@ -129,7 +158,8 @@ on request, then Phase 3 requested). No Phase 4 work has started.
 - Records keep `n_neurons` (LIF units) and `n_weights` (weight parameters). For conv
   layers `n_weights` is not the logical synapse count; the synapse definition
   (padding, weight sharing) is deferred to Phase 4 together with synaptic-operation
-  counting.
+  counting. Resolved in Phase 4: records also store `n_synapses` (logical connections;
+  see `docs/metrics.md`).
 - MNIST (torchvision) is deferred until an experiment needs real data, most likely in
   Phase 3. Tests stay download-free.
 - The conv model stays minimal (one 3x3/stride-2 conv LIF layer) until an experiment
@@ -147,7 +177,7 @@ on request, then Phase 3 requested). No Phase 4 work has started.
   minibatch, not per timestep; per-timestep online learning signals are not implemented.
 - Hidden-layer error feedback uses fixed random matrices drawn from the run seed.
 
-## Open questions (Phase 3, for review)
+## Phase 3 notes (accepted)
 
 - Prequential evaluation is per minibatch (default 8): the whole batch is predicted
   before any update from it. Batch size 1 gives strict per-sample test-then-train at
@@ -164,9 +194,20 @@ on request, then Phase 3 requested). No Phase 4 work has started.
   (no tuning utility exists yet; protocols check split roles instead), multi-seed
   aggregation/reporting (planned right after Phase 4).
 
+## Open questions (Phase 4, for review)
+
+- Energy proxy defaults are arithmetic-only 45 nm FP32 costs; memory access is excluded
+  and would likely dominate. A memory-aware or target-hardware model (e.g. SpiNNaker2
+  figures from a partner) can replace the coefficients without code changes.
+- In the tiny reference, input spikes dominate synops, so rule differences in hidden
+  activity barely move the total; per-layer synops are not yet reported separately.
+- Neuron-update and weight-update energy are 0 by default (counted, not costed).
+- Quantization uses deterministic rounding; stochastic rounding and bounded-precision
+  traces are not implemented. STDP now clips weights to `w_max` at binding (previously
+  on its first update), which slightly changed one STDP seed (0.914 -> 0.906).
+
 ## Known limitations
 
-- No synaptic-operation counting or energy proxy (Phase 4).
 - No reporting (comparison guards, figures, tables) yet.
 
 ## Scientific caveats
@@ -181,5 +222,6 @@ on request, then Phase 3 requested). No Phase 4 work has started.
 
 ## Next phase, after review
 
-Phase 4: synaptic-operation counting (including the conv definition), energy proxies
-with explicit assumptions, optional fixed-point / bounded-precision weights for rules.
+Multi-seed reporting (aggregation, comparison guards, reference figure and metrics
+table), then Phase 5: document hardware constraints, flesh out the `HardwareBackend`
+interface, export of model + rule description (no hardware-specific implementation).
