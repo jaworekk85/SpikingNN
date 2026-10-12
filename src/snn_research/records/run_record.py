@@ -28,7 +28,7 @@ class RunRecord:
     model: dict[str, Any]  # kind, neuron and weight counts
     dataset: dict[str, Any]  # version and split sizes
     protocol: str
-    metrics: dict[str, float]
+    metrics: dict[str, float | None]  # None = unavailable (e.g. never recovered)
     traces: dict[str, list[float]]
     backend_kind: str = "simulation"
     shift: dict[str, Any] | None = None

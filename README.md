@@ -3,10 +3,12 @@
 Zaczątek frameworka badawczego do spiking neural networks (SNN), lokalnych reguł
 uczenia oraz adaptacji do niestacjonarnych strumieni danych.
 
-**Stan: faza 2 — lokalne uczenie, czeka na przegląd.** Pakiet zawiera referencyjny
+**Stan: faza 3 — niestacjonarność, czeka na przegląd.** Pakiet zawiera referencyjny
 neuron LIF, enkodery, małe sieci MLP/conv, trzy reguły uczenia (surrogate BPTT, STDP,
-reguła trójczynnikowa ze śladami uprawnień), metryki aktywności i niezmienny zapis
-wyników. Przesunięcia danych i protokoły strumieniowe to kolejna faza.
+reguła trójczynnikowa ze śladami uprawnień), seedowane zmiany danych z harmonogramem,
+protokoły offline / prequential / sekwencja zadań, metryki aktywności i adaptacji
+(jakość przed/w trakcie/po zmianie, powrót, zapominanie) oraz niezmienny zapis wyników.
+Liczenie operacji synaptycznych i proxy energii to kolejna faza.
 
 - [Specyfikacja projektu](SNN_AGENT_RESEARCH_SPEC.md)
 - [Architektura, kontrakty i zależności](docs/research_framework.md)

@@ -39,6 +39,22 @@ stdp:
   tau_plus_ms: 10.0
   tau_minus_ms: 10.0
   w_max: 1.0
-protocol:
+pretrain:
   epochs: 5
   batch_size: 32
+stream:  # prequential: predict each minibatch, then adapt on it
+  length: 768
+  batch_size: 8
+  adapt: true
+  window: 64
+  q_target: 0.8
+shift:
+  kind: noise  # noise | intensity | label_permutation
+  magnitude: 0.3
+  seed: 0
+  schedule:
+    timing: abrupt  # abrupt | gradual | incremental | recurring
+    start: 256
+    end: 512
+    steps: 4
+    period: 64

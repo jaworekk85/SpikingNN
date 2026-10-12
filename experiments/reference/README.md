@@ -2,8 +2,10 @@
 
 Current subset (`run.py`, config `configs/experiments/reference_tiny.yaml`):
 seeded synthetic prototypes -> rate encoding -> LIF MLP -> learning rule ->
-offline test evaluation -> one `RunRecord` per seed. The rule is chosen by `rule:` in
-the config or `--rule surrogate_bptt | three_factor | stdp`. MNIST, the shift and the
+offline pretraining -> prequential stream with one seeded, scheduled shift (pre-shift
+-> shift -> post-shift, online adaptation) -> clean and shifted test accuracy ->
+one `RunRecord` per seed. The rule is chosen by `rule:` in the config or
+`--rule surrogate_bptt | three_factor | stdp`. MNIST, synaptic operations and the
 figure/table arrive with later phases.
 
 The complete planned reference uses a small LIF MLP, rate-encoded MNIST

@@ -38,33 +38,49 @@ def evaluate(model, split: Split, encoding: EncodingConfig, batch_size: int, gen
     return {"accuracy": accuracy(torch.cat(logits), torch.cat(labels)), **activity_summary(spikes)}
 
 
-def run_offline(model, rules: Sequence, train: Split, test: Split, encoding: EncodingConfig,
-                config: OfflineConfig, generator: torch.Generator) -> dict:
-    """Return per-epoch training traces and final test metrics.
+def forward_and_learn(model, rules: Sequence, x: torch.Tensor, y: torch.Tensor, encoding: EncodingConfig,
+                      generator: torch.Generator, learn: bool = True):
+    """One forward pass; then, if ``learn``, every rule updates from that same pass.
 
-    Every rule receives the same observations and modulators after each minibatch:
-    ``loss`` (cross-entropy, with a graph only if some rule uses autograd) and
-    ``error`` (``onehot(label) - softmax(logits)``, detached).
+    Rules receive the same observations and modulators: ``loss`` (cross-entropy, with
+    a graph only if some rule uses autograd) and ``error`` (``onehot(label) -
+    softmax(logits)``, detached). Returned logits come from before the update.
     """
-    if train.role != "train" or test.role != "test":
-        raise ValueError("run_offline expects a 'train' split and a 'test' split")
-    for rule in rules:
-        rule.init_state(model)
-    needs_graph = any(rule.declaration.uses_autograd for rule in rules)
+    needs_graph = learn and any(rule.declaration.uses_autograd for rule in rules)
+    with torch.set_grad_enabled(needs_graph):
+        logits, observations = model(encode(encoding, x, generator).values)
+        loss = F.cross_entropy(logits, y)
+    if learn:
+        error = (F.one_hot(y, logits.shape[-1]) - logits.softmax(-1)).detach()
+        modulators = {"loss": loss, "error": error}
+        for rule in rules:
+            rule.apply(rule.step(model, observations, modulators))
+    return logits.detach(), observations, loss.item()
+
+
+def train_epochs(model, rules: Sequence, train: Split, encoding: EncodingConfig,
+                 config: OfflineConfig, generator: torch.Generator) -> dict[str, list[float]]:
+    """Train bound rules on a ``train`` split; return per-epoch loss and accuracy."""
+    if train.role != "train":
+        raise ValueError("training requires a 'train' split")
     traces: dict[str, list[float]] = {"train_loss": [], "train_accuracy": []}
     for _ in range(config.epochs):
         losses, correct, seen = [], 0.0, 0
         for x, y in train.batches(config.batch_size, generator):
-            with torch.set_grad_enabled(needs_graph):
-                logits, observations = model(encode(encoding, x, generator).values)
-                loss = F.cross_entropy(logits, y)
-            error = (F.one_hot(y, logits.shape[-1]) - logits.softmax(-1)).detach()
-            modulators = {"loss": loss, "error": error}
-            for rule in rules:
-                rule.apply(rule.step(model, observations, modulators))
-            losses.append(loss.item())
-            correct += accuracy(logits.detach(), y) * len(y)
+            logits, _, loss = forward_and_learn(model, rules, x, y, encoding, generator)
+            losses.append(loss)
+            correct += accuracy(logits, y) * len(y)
             seen += len(y)
         traces["train_loss"].append(sum(losses) / len(losses))
         traces["train_accuracy"].append(correct / seen)
+    return traces
+
+
+def run_offline(model, rules: Sequence, train: Split, test: Split, encoding: EncodingConfig,
+                config: OfflineConfig, generator: torch.Generator) -> dict:
+    """Train on ``train``, then evaluate once on ``test``. Rules must already be bound
+    with ``init_state(model)``; protocols order learning and evaluation only."""
+    if test.role != "test":
+        raise ValueError("run_offline evaluates on a 'test' split")
+    traces = train_epochs(model, rules, train, encoding, config, generator)
     return {"traces": traces, "test": evaluate(model, test, encoding, config.batch_size, generator)}

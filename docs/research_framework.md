@@ -148,10 +148,23 @@ rate, temporal dynamics, concept/labels and unseen conditions. Begin with a smal
 seeded input-noise example; frequency drift alone does not satisfy the design.
 For an abrupt shift, document which boundary sample represents the transition.
 
+Implemented (Phase 3): `Schedule(timing, start, end, steps, period)` with
+`strength(index)` and `phase_at(index)`; sample `start` is the first shifted sample.
+Kinds: `noise` (covariate), `intensity` (illumination-like, changes input event rate
+under rate coding) and `label_permutation` (concept). New classes/tasks use the task
+sequence protocol. `Stream` applies shifts by stream index in their saved order, each
+with its own seeded generator. Temporal-dynamics shifts and held-out unseen
+conditions beyond a fully shifted test split are not implemented yet.
+
 ### Protocol (Phase 3; offline subset in Phase 1)
 
 `Protocol.run(model, rule, stream, encoder, metrics) -> RunRecord` owns state reset,
 evaluation and update order. Use direct explicit composition; no registry.
+
+Implemented as functions (`run_offline`, `run_prequential`, `run_task_sequence`)
+returning traces and metrics; the experiment assembles the `RunRecord`. Rules are
+bound once by the caller (`init_state`), so rule state (e.g. random feedback weights,
+optimizer moments) persists across protocol stages.
 
 - Offline: train on `train`, optionally select using `tune`, then evaluate `test`.
 - Task sequence: train/adapt in sequence and evaluate all seen tasks.

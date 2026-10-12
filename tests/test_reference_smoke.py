@@ -27,8 +27,14 @@ def test_reference_cli_writes_one_record_per_seed(tmp_path):
     run_dirs = reference.main(["--config", str(CONFIG), "--results", str(tmp_path)])
     assert len(run_dirs) == 2
     record = json.loads((run_dirs[0] / "record.json").read_text())
-    assert record["traces"]["train_loss"][-1] < record["traces"]["train_loss"][0]
+    loss = record["traces"]["pretrain/train_loss"]
+    assert loss[-1] < loss[0]
     assert record["energy_proxy"] is None and record["energy_j"] is None
+    assert record["shift"]["kind"] == "noise" and len(record["traces"]["stream/correct"]) == 768
+    for phase in ("before", "during", "after"):  # pre/during/post-shift quality always reported
+        assert f"stream/shift0/quality_{phase}" in record["metrics"]
+    for key in ("test_clean/forgetting", "stream/shift0/recovery_samples", "stream/shift0/adaptation_updates"):
+        assert key in record["metrics"]
 
 
 @pytest.mark.parametrize(
@@ -42,6 +48,6 @@ def test_reference_cli_writes_one_record_per_seed(tmp_path):
 def test_same_model_and_data_train_with_each_rule(rule, localities):
     config = replace(reference.load_config(reference.ReferenceConfig, CONFIG), rule=rule)
     a, b = reference.run_seed(config, 0), reference.run_seed(config, 0)
-    assert a.metrics["test/accuracy"] > 0.4  # 4 classes: chance is 0.25
+    assert a.metrics["pretrain/test/accuracy"] > 0.4  # 4 classes: chance is 0.25
     assert [d["locality"] for d in a.rule_declarations] == localities
     assert a.metrics == b.metrics and a.traces == b.traces  # same seed -> same result

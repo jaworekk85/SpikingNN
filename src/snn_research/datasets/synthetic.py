@@ -23,6 +23,11 @@ class Split:
         if len(self.x) != len(self.y):
             raise ValueError("x and y must have the same length")
 
+    def subset(self, classes: tuple[int, ...]) -> Split:
+        """Samples of the given classes only (labels unchanged), same role."""
+        keep = torch.isin(self.y, torch.tensor(classes))
+        return Split(self.x[keep], self.y[keep], self.role, f"{self.version}-classes{list(classes)}")
+
     def batches(self, batch_size: int, generator: torch.Generator | None = None) -> Iterator[tuple[torch.Tensor, torch.Tensor]]:
         """Yield minibatches; shuffled only when a generator is given."""
         order = torch.randperm(len(self.y), generator=generator) if generator is not None else torch.arange(len(self.y))

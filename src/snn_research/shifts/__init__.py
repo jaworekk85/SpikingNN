@@ -1,1 +1,5 @@
-"""Placeholder for seeded shifts and schedules (Phase 3)."""
+"""Seeded shifts with explicit schedules."""
+
+from .shift import KINDS, TIMINGS, Schedule, ShiftConfig, apply_shift
+
+__all__ = ["KINDS", "TIMINGS", "Schedule", "ShiftConfig", "apply_shift"]
