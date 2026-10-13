@@ -14,7 +14,7 @@ authorize experiments. Stop for review before Phase 1.
 | PyTorch | Reference tensors, LIF dynamics, models and training | Phase 1 |
 | PyYAML | Load YAML into explicitly validated dataclasses | Phase 1 |
 | pytest | Tiny CPU dynamics, invariants and smoke tests | Phase 1 |
-| torchvision | Optional MNIST/Fashion-MNIST access; cached downloads | When first needed |
+| (no torchvision) | MNIST/Fashion-MNIST read from original IDX files, N-MNIST from the original zips with numpy; MD5-checked cached downloads | Real-data step (2026-10-13) |
 | snnTorch | Single optional surrogate-gradient adapter | When first needed |
 | matplotlib | Reference figure generation (object-oriented API, no GUI backend) | Reporting (after Phase 4) |
 
@@ -29,8 +29,8 @@ Brian2, GeNN or hardware SDK is introduced. CPU is the default; GPU is optional.
 | `neurons/` | Reference LIF state, threshold, reset and refractory dynamics |
 | `models/` | Small MLP/conv SNN and exposed per-layer state |
 | `learning_rules/` | Rule declarations, rule state and explicit parameter updates |
-| `encoding/` | Rate, latency, direct-current encoding; event binning later |
-| `datasets/` | Split roles, metadata, cached data and ordered streams |
+| `encoding/` | Rate, latency, direct-current and binned-event (`events`) encoding |
+| `datasets/` | Split roles, synthetic data, MNIST/Fashion-MNIST, N-MNIST (binned events), ordered streams |
 | `shifts/` | Seeded transforms and explicit shift schedules |
 | `protocols/` | Learning/evaluation ordering and shift-phase bookkeeping |
 | `metrics/` | Quality, activity, forgetting, recovery and separate adaptation costs |

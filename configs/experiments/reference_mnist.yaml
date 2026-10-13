@@ -1,0 +1,71 @@
+# MNIST reference (subsampled for CPU: 6k train / 1k test). Pipeline validation, not a
+# research result. Downloads MNIST once into data/ (MD5-checked). ~1 min per seed for all rules.
+experiment: reference_mnist
+seeds: [0, 1, 2]
+device: cpu
+dataset: mnist
+mnist:
+  variant: mnist
+  root: data
+  n_train: 6000
+  n_test: 1000
+  seed: 0
+  flatten: true
+encoding:
+  kind: rate
+  T: 20
+neuron:
+  tau_mem_ms: 10.0
+  dt_ms: 1.0
+  threshold: 1.0
+  reset: subtract
+  refractory_steps: 0
+  surrogate_slope: 10.0
+model:
+  kind: mlp
+  hidden: [128]
+  init_gain: 5.0  # default init leaves hidden LIF layers almost silent
+rule: surrogate_bptt  # or three_factor, stdp (STDP hidden + three-factor readout)
+surrogate_bptt:
+  lr: 0.01
+three_factor:  # tuned on MNIST seed 0 (lower than the 16-input tiny config)
+  lr: 0.1
+  readout_lr: 0.5
+  tau_pre_ms: 10.0
+  tau_eligibility_ms: 20.0
+  pseudo_slope: 5.0
+  train_hidden: true
+  w_max: 0.0  # 0 = unbounded
+  weight_bits: 0  # 0 = full precision; e.g. 8 with w_max > 0 for fixed-point weights
+stdp:  # depression must dominate on 784 inputs, otherwise activity runs away (no homeostasis)
+  a_plus: 0.0001
+  a_minus: 0.00015
+  tau_plus_ms: 10.0
+  tau_minus_ms: 10.0
+  w_max: 1.0
+  weight_bits: 0
+pretrain:
+  epochs: 5
+  batch_size: 32
+stream:  # prequential: predict each minibatch, then adapt on it
+  length: 768
+  batch_size: 8
+  adapt: true
+  window: 64
+  q_target: 0.7
+shift:
+  kind: noise  # noise | intensity | label_permutation | latency_jitter (magnitude = max delay steps)
+  magnitude: 0.3
+  seed: 0
+  schedule:
+    timing: abrupt  # abrupt | gradual | incremental | recurring
+    start: 256
+    end: 512
+    steps: 4
+    period: 64
+energy:  # proxy coefficients (pJ per operation); arithmetic only, not measured energy
+  pj_per_synop: 0.9
+  pj_per_mac: 4.6
+  pj_per_neuron_update: 0.0
+  pj_per_weight_update: 0.0
+  source: "Horowitz ISSCC 2014 / Han et al. 2015: 45 nm FP32 arithmetic only, no memory access"

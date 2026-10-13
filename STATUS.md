@@ -1,13 +1,13 @@
 # Project status
 
-Updated: 2026-10-12 (Europe/Warsaw).
+Updated: 2026-10-13 (Europe/Warsaw).
 
 ## Current phase
 
-**Multi-seed reporting (between Phases 4 and 5): complete, awaiting review.**
-Phases 0–2 were accepted on 2026-10-11; Phase 3 (with latency jitter) and Phase 4 on
-2026-10-12 (Phase 4: committed and pushed on request, then reporting requested).
-No Phase 5 work has started.
+**Phase 5 — hardware readiness: complete, awaiting review.**
+Phases 0–2 were accepted on 2026-10-11; Phases 3–4 and multi-seed reporting on
+2026-10-12/13. On 2026-10-13 the user asked for Phase 5 and the real-data step
+(MNIST, then N-MNIST) in one session; Phase 6 (Jülich pilot) has not started.
 
 ## Done
 
@@ -108,10 +108,64 @@ No Phase 5 work has started.
 - Reference: `--rule all` and `--report`; `experiments/reference/report.py` for saved runs.
 - `matplotlib>=3.7` added to the package dependencies (`pyproject.toml`).
 
+### Phase 5
+- `backends.export`: `export_network` (timing, LIF equations and parameters incl.
+  `beta` and input scale, layer shapes, logical synapses, max fan-in/fan-out, readout,
+  rule declarations/parameters/state/targets, totals) and `save_export`
+  (`export.json` + `weights.npz`, never overwrites).
+- `backends.hardware`: `HardwareBackend` protocol (`load`, `run`, `measure`),
+  `Measurement` (the only route to `energy_j`), `HardwareConstraints` as data and
+  `check_constraints` (neuron model, reset, dt, fan-in, rule weight precision, on-chip
+  learning, readout mapping, rough memory estimate; unknown limits skipped).
+- `configs/hardware/spinnaker2_draft.yaml`: public-source draft, `status: to be
+  confirmed`, with sources. No backend implementation, no hardware used.
+- Reference: `--export` / `--hardware <yaml>` write export + check into run dirs.
+- `docs/neuromorphic_hardware.md`: export contents, port mapping notes, public
+  SpiNNaker2/Loihi 2 information (to be confirmed) and questions for the partner.
+
+### Real data (requested together with Phase 5)
+- `datasets.mnist`: MNIST / Fashion-MNIST from the original IDX files (MD5-checked,
+  cached in `data/`, seeded subsampling); no torchvision dependency.
+- `datasets.nmnist`: N-MNIST read directly from the original zips (MD5-checked, no
+  extraction), 5-byte event decoding with timestamp-overflow markers, binning into `T`
+  binary frames over `window_ms` (2 polarities x 34x34), `uint8` storage, `.pt` cache.
+- `encoding.events`: pass-through of binned events (Bernoulli on values, so shifted
+  frames become dropped/added events); `Split`/`Stream` convert compact `uint8` to float.
+- Reference: `dataset: synthetic | mnist | nmnist`; N-MNIST requires `events` encoding,
+  `T = nmnist.T` and `neuron.dt_ms` = bin width. Configs `reference_mnist.yaml`,
+  `reference_nmnist.yaml` (6k train / 1k test, 128 hidden LIF, 3 seeds).
+- Three-factor update now in closed form (one matrix product instead of per-sample
+  per-synapse traces): identical up to float32 rounding (tested), MNIST run 286 s -> 16 s.
+
 ## Validation
 
-- Local: Python 3.12.3, PyTorch 2.14.1+cpu, matplotlib 3.11.2, `pytest`: 65 passed in
-  ~16 s. A fresh virtual environment installed from `pyproject.toml` (CPU wheels) also
+- Local: Python 3.12.3, PyTorch 2.14.1+cpu, matplotlib 3.11.2, `pytest`: 79 passed in
+  ~20 s (after Phase 5 and the real-data step).
+- Real-data tests (no downloads): IDX round trip, MD5 rejection, N-MNIST event decoding
+  incl. overflow, binning window, reading from a zip without extraction, `events`
+  encoding pass-through and `T` check, `uint8` batches, config ties for event data,
+  closed-form three-factor update equals step-by-step traces.
+- MNIST reference (3 seeds, 6k/1k, noise shift 0.3, mean ± sd): pretrain test accuracy
+  BPTT 0.941 ± 0.007, three-factor 0.924 ± 0.003, STDP + three-factor readout
+  0.710 ± 0.024. Stream quality before/during/after: BPTT 0.971/0.757/0.815,
+  three-factor 0.939/0.793/0.736, STDP 0.703/0.585/0.582. Clean-test forgetting after
+  the stream: BPTT 0.074, three-factor 0.095 (± 0.051), STDP 0.021. Hidden spike rate
+  BPTT 0.33, three-factor 0.40, STDP 0.05; synops per sample ~265–274k, dominated by
+  input spikes. Single-condition pipeline validation, not a research result.
+- N-MNIST reference (3 seeds, 6k/1k, 300 ms in 30 x 10 ms bins, event rate halved
+  during the shift): pretrain test accuracy BPTT 0.926 ± 0.011, three-factor
+  0.854 ± 0.007, STDP + three-factor readout 0.107 ± 0.008 (chance). Stream quality
+  before/during/after: BPTT 0.995/0.895/0.898, three-factor 0.872/0.826/0.831 (smallest
+  drop), STDP ~0.13–0.19. Hidden spike rate BPTT 0.34, three-factor 0.18 (about half
+  the spikes of BPTT), STDP 0.33. Clean-test accuracy after the stream: BPTT 0.80,
+  three-factor 0.75 (forgetting 0.13 / 0.10). On event data the latency-jitter shift
+  matters (BPTT 0.996 -> 0.871 with up to 50 ms delays), unlike rate-coded MNIST.
+- Phase 5 tests: dense and conv export (neuron parameters, layer synapses equal
+  `synapse_count`, fan-in, rule state and targets, weights round-trip, no overwrite);
+  constraint check flags each mismatch and skips unknowns; the SpiNNaker2 draft loads
+  and is marked unconfirmed; only a hardware `Measurement` can set `energy_j`.
+- Tiny three-factor export vs the SpiNNaker2 draft: 0 errors, 1 warning (float weights
+  vs 8-bit storage), estimated memory ~3.5 kB of ~19.9 MB on-chip SRAM. A fresh virtual environment installed from `pyproject.toml` (CPU wheels) also
   passes the suite.
 - Reporting tests: comparability guard (refusal and allowed mismatch listing), seed
   aggregation with unavailable values, table formatting, trailing mean, report directory
@@ -227,7 +281,38 @@ No Phase 5 work has started.
   traces are not implemented. STDP now clips weights to `w_max` at binding (previously
   on its first update), which slightly changed one STDP seed (0.914 -> 0.906).
 
-## Open questions (reporting, for review)
+## Open questions (real data, for review)
+
+- Local-rule hyperparameters were tuned by hand on MNIST seed 0 (a handful of runs, no
+  tuning split); a proper `tune`-split search is needed before any comparison claim.
+- STDP without homeostasis is unstable on 784 inputs: with depression <= 1.2x
+  potentiation activity runs away (spike rate up to 0.95, chance accuracy); with 1.5x it
+  stays sparse (0.05) and reaches 0.71, above random fixed features + trained readout
+  (0.59 on seed 0). Homeostasis / lateral inhibition (as in Diehl & Cook 2015) is the
+  known remedy and a candidate for the pilot.
+- Single-seed results move noticeably with tiny numerical differences (e.g. 0.867 ->
+  0.781 on the tiny config after a float32-rounding-level change), so only multi-seed
+  results should be reported.
+- STDP fails on N-MNIST: with the MNIST settings it is at chance; a 4-run sweep
+  (`a_plus` 1e-5..1e-4, depression 1.5–3x, tau 20 ms) gave 0.16–0.23 with the hidden
+  layer either silent (rate ~0.006) or uninformative. Without homeostasis / lateral
+  inhibition it does not learn useful event features here; the config keeps the MNIST
+  values and the report shows the failure rather than hiding it.
+- N-MNIST uses all three saccades (300 ms, 10 ms bins); `window_ms: 100` would use the
+  first saccade only and run ~3x faster. A full 3-rule x 3-seed report takes ~10 min.
+
+## Open questions (Phase 5, for review)
+
+- Our own JSON export vs NIR (Neuromorphic Intermediate Representation), which
+  SpiNNaker2 and Loihi tooling reportedly support. NIR would add a dependency and
+  covers inference graphs; our export also describes the learning rules. Proposal:
+  keep ours, add NIR when the partner confirms it is their preferred route.
+- The memory estimate is rough (counts each feedback vector as one value, ignores input
+  pre-traces, routing and code). Good enough to flag gross over-sizing only.
+- For the pilot, local rules should run with `weight_bits: 8` and a suitable `w_max`
+  so that learning is simulated at the draft hardware precision.
+
+## Reporting notes (accepted)
 
 - The tiny reference shows the expected shape (drop during the shift, partial recovery;
   BPTT highest quality; three-factor most spikes) but with 2 seeds and synthetic data it
@@ -253,5 +338,6 @@ No Phase 5 work has started.
 
 ## Next phase, after review
 
-Phase 5: document hardware constraints, flesh out the `HardwareBackend` interface,
-export of model + rule description (no hardware-specific implementation).
+Real data (MNIST, then N-MNIST; requested together with Phase 5), then Phase 6: the
+Jülich pilot in simulation (multiple seeds, quality-matched/Pareto comparison,
+chip-realistic size, quantization effect, partner-facing `docs/juelich_pilot.md`).

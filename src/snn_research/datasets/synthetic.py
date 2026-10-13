@@ -12,7 +12,7 @@ ROLES = ("train", "tune", "test")
 
 @dataclass(frozen=True)
 class Split:
-    x: torch.Tensor  # [n, ...], intensities in [0, 1]
+    x: torch.Tensor  # [n, ...], values in [0, 1]; may be stored compactly (e.g. uint8 events)
     y: torch.Tensor  # [n]
     role: str
     version: str
@@ -33,7 +33,7 @@ class Split:
         order = torch.randperm(len(self.y), generator=generator) if generator is not None else torch.arange(len(self.y))
         for i in range(0, len(order), batch_size):
             idx = order[i : i + batch_size]
-            yield self.x[idx], self.y[idx]
+            yield self.x[idx].float(), self.y[idx]
 
 
 @dataclass(frozen=True)

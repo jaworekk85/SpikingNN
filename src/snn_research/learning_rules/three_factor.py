@@ -66,9 +66,26 @@ def eligibility_traces(obs: LocalObservation, config: ThreeFactorConfig, dt_ms: 
 
 def three_factor_update(obs: LocalObservation, modulator: torch.Tensor, config: ThreeFactorConfig,
                         dt_ms: float, threshold: float) -> torch.Tensor:
-    """``lr * mean_batch(M_j * mean_t e_ij)`` for a ``[batch, n_post]`` modulator."""
-    mean_e = sum(eligibility_traces(obs, config, dt_ms, threshold)) / obs.pre.shape[0]
-    return config.lr * torch.einsum("bj,bji->ji", modulator, mean_e) / modulator.shape[0]
+    """``lr * mean_batch(M_j * mean_t e_ij)`` for a ``[batch, n_post]`` modulator.
+
+    Computed in closed form, identical to averaging ``eligibility_traces``: since
+    ``e(t) = sum_{s<=t} lambda^(t-s) psi(s) x(s)``, the time mean is
+    ``(1/T) sum_s c_s psi(s) x(s)`` with ``c_s = (1 - lambda^(T-s)) / (1 - lambda)``,
+    so no per-sample, per-synapse trace tensor is materialised.
+    """
+    T = obs.pre.shape[0]
+    beta_pre = math.exp(-dt_ms / config.tau_pre_ms)
+    lambda_e = math.exp(-dt_ms / config.tau_eligibility_ms)
+    x, pre_traces = torch.zeros_like(obs.pre[0]), []
+    for pre in obs.pre:
+        x = beta_pre * x + pre
+        pre_traces.append(x)
+    psi = 1 / (1 + config.pseudo_slope * (obs.post_potential - threshold).abs()) ** 2  # [T, batch, n_post]
+    steps_left = T - torch.arange(T, dtype=psi.dtype)  # T - s for s = 0 .. T-1
+    weight = (1 - lambda_e ** steps_left) / (1 - lambda_e)
+    post_factor = (modulator.unsqueeze(0) * psi * weight.view(T, 1, 1)).flatten(0, 1)  # [T * batch, n_post]
+    pre_factor = torch.stack(pre_traces).flatten(0, 1)  # [T * batch, n_pre]
+    return config.lr * post_factor.T @ pre_factor / (T * modulator.shape[0])
 
 
 class ThreeFactor:

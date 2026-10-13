@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from matplotlib.figure import Figure
+from matplotlib.ticker import MaxNLocator, StrMethodFormatter
 
 from .compare import group_label
 
@@ -53,7 +54,7 @@ def reference_figure(records: Sequence[dict[str, Any]], path: str | Path) -> Pat
     stream_cfg, schedule = records[0]["config"]["stream"], records[0]["shift"]["schedule"]
     window = stream_cfg["window"]
 
-    fig = Figure(figsize=(11, 4.2), dpi=150, facecolor=SURFACE)
+    fig = Figure(figsize=(11, 4.6), dpi=150, facecolor=SURFACE)
     left, right = fig.subplots(1, 2, gridspec_kw={"width_ratios": [1.5, 1]})
     for ax in (left, right):
         _style(ax)
@@ -85,11 +86,13 @@ def reference_figure(records: Sequence[dict[str, Any]], path: str | Path) -> Pat
         mx, my = sum(x) / len(x), sum(y) / len(y)
         right.scatter([mx], [my], s=90, color=colors[label], edgecolors=SURFACE, linewidths=2, zorder=3)
         right.annotate(label, (mx, my), xytext=(7, 5), textcoords="offset points", fontsize=8, color=TEXT)
+    right.xaxis.set_major_locator(MaxNLocator(nbins=4))
+    right.xaxis.set_major_formatter(StrMethodFormatter("{x:,.0f}"))
     right.set_xlabel("synaptic operations per test sample")
     right.set_ylabel("test accuracy after pretraining")
     right.set_title("Quality vs activity (dots: seeds)", fontsize=10, loc="left")
 
-    legend = left.legend(loc="lower left", fontsize=8, frameon=False)
+    legend = left.legend(loc="upper left", bbox_to_anchor=(0, -0.16), ncol=len(labels), fontsize=8, frameon=False)
     for text in legend.get_texts():
         text.set_color(TEXT)
     fig.text(0.01, 0.01, "Simulation only. Synaptic operations are logical counts, not measured energy.",

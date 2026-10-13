@@ -111,3 +111,10 @@ def test_declarations_of_local_rules():
     with pytest.raises(ValueError):
         RuleDeclaration("bad", uses_autograd=True, locality="synapse_local", online_capable=True,
                         state=(), modulator_source="none")
+
+
+def test_closed_form_three_factor_update_matches_step_by_step_traces():
+    obs, modulator = random_obs(batch=4, T=11, n_pre=7, n_post=5), torch.randn(4, 5)
+    step_by_step = sum(eligibility_traces(obs, TF_CFG, 1.0, 1.0)) / 11
+    expected = TF_CFG.lr * torch.einsum("bj,bji->ji", modulator, step_by_step) / 4
+    torch.testing.assert_close(three_factor_update(obs, modulator, TF_CFG, 1.0, 1.0), expected)

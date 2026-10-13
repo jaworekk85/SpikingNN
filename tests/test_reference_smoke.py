@@ -24,8 +24,13 @@ reference = load_reference()
 
 
 def test_reference_cli_writes_one_record_per_seed_and_a_report(tmp_path):
-    run_dirs = reference.main(["--config", str(CONFIG), "--results", str(tmp_path), "--report"])
+    hardware = ROOT / "configs" / "hardware" / "spinnaker2_draft.yaml"
+    run_dirs = reference.main(["--config", str(CONFIG), "--results", str(tmp_path), "--report",
+                               "--hardware", str(hardware)])
     assert len(run_dirs) == 2
+    export = json.loads((run_dirs[0] / "export.json").read_text())
+    assert export["constraint_check"]["status"] == "to be confirmed"
+    assert (run_dirs[0] / "weights.npz").exists()
     (report_dir,) = (tmp_path / "reference_tiny").glob("report_*")
     assert {p.name for p in report_dir.iterdir()} == {"report.md", "figure.png", "summary.json"}
     record = json.loads((run_dirs[0] / "record.json").read_text())

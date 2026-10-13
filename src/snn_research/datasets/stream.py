@@ -36,7 +36,7 @@ class Stream:
         generators = [torch.Generator().manual_seed(s.seed) for s in self.shifts]
         for start in range(0, self.length, batch_size):
             index = torch.arange(start, min(start + batch_size, self.length))
-            x, y = self.split.x[self.order[index]], self.split.y[self.order[index]]
+            x, y = self.split.x[self.order[index]].float(), self.split.y[self.order[index]]
             strengths = [s.schedule.strength(index) for s in self.shifts]
             inputs, y = shift_and_encode(self.shifts, x, y, strengths, generators, encoding, generator,
                                          self.n_classes)

@@ -1,4 +1,4 @@
-"""Reference pipeline: synthetic data -> encoder -> LIF SNN -> learning rule.
+"""Reference pipeline: data (synthetic, MNIST or N-MNIST) -> encoder -> LIF SNN -> learning rule.
 
 1. Offline pretraining on clean data; test accuracy on clean and fully shifted test data.
 2. Prequential stream with one scheduled shift (pre-shift -> shift -> post-shift),
@@ -25,7 +25,16 @@ from pathlib import Path
 
 import torch
 
-from snn_research.datasets import Stream, SyntheticConfig, synthetic_prototypes
+from snn_research.datasets import (
+    MNISTConfig,
+    NMNISTConfig,
+    Split,
+    Stream,
+    SyntheticConfig,
+    load_mnist,
+    load_nmnist,
+    synthetic_prototypes,
+)
 from snn_research.encoding import EncodingConfig
 from snn_research.energy import EnergyProxyConfig, energy_proxy_pj
 from snn_research.learning_rules import (
@@ -36,7 +45,8 @@ from snn_research.learning_rules import (
     ThreeFactor,
     ThreeFactorConfig,
 )
-from snn_research.models import ModelConfig, build_model, count_neurons
+from snn_research.backends import HardwareConstraints, check_constraints, export_network, save_export
+from snn_research.models import ModelConfig, SpikingNet, build_model, count_neurons
 from snn_research.neurons import LIFParams
 from snn_research.metrics import forgetting, synapse_count
 from snn_research.protocols import OfflineConfig, PrequentialConfig, evaluate, run_offline, run_prequential
@@ -82,7 +92,10 @@ class ReferenceConfig:
     experiment: str = "reference"
     seeds: tuple[int, ...] = (0,)
     device: str = "cpu"
+    dataset: str = "synthetic"  # synthetic | mnist (variant may be fashion_mnist) | nmnist
     data: SyntheticConfig = field(default_factory=SyntheticConfig)
+    mnist: MNISTConfig = field(default_factory=MNISTConfig)
+    nmnist: NMNISTConfig = field(default_factory=NMNISTConfig)
     encoding: EncodingConfig = field(default_factory=EncodingConfig)
     neuron: LIFParams = field(default_factory=LIFParams)
     model: ModelConfig = field(default_factory=ModelConfig)
@@ -96,6 +109,15 @@ class ReferenceConfig:
     energy: EnergyProxyConfig = field(default_factory=EnergyProxyConfig)
 
     def __post_init__(self) -> None:
+        if self.dataset not in ("synthetic", "mnist", "nmnist"):
+            raise ValueError("dataset must be 'synthetic', 'mnist' or 'nmnist'")
+        if self.dataset == "nmnist":
+            if self.encoding.kind != "events" or self.encoding.T != self.nmnist.T:
+                raise ValueError("N-MNIST needs encoding kind 'events' with T equal to nmnist.T")
+            if abs(self.neuron.dt_ms - self.nmnist.bin_ms) > 1e-9:
+                raise ValueError(f"neuron dt_ms must equal the event bin width ({self.nmnist.bin_ms} ms)")
+        elif self.encoding.kind == "events":
+            raise ValueError("encoding 'events' requires dataset 'nmnist'")
         if self.rule not in RULES:
             raise ValueError(f"rule must be one of {RULES}, got {self.rule!r}")
         if not self.seeds:
@@ -114,11 +136,30 @@ def build_rules(config: ReferenceConfig) -> list:
     return [STDP(config.stdp), ThreeFactor(replace(config.three_factor, train_hidden=False))]
 
 
+def load_data(config: ReferenceConfig) -> tuple[Split, Split, int]:
+    """Train/test splits and the number of classes."""
+    if config.dataset == "mnist":
+        return (*load_mnist(config.mnist), config.mnist.n_classes)
+    if config.dataset == "nmnist":
+        return (*load_nmnist(config.nmnist), config.nmnist.n_classes)
+    return (*synthetic_prototypes(config.data), config.data.n_classes)
+
+
+def input_shape(config: ReferenceConfig) -> tuple[int, ...]:
+    if config.dataset == "nmnist":
+        return config.nmnist.shape
+    return config.mnist.shape if config.dataset == "mnist" else tuple(config.data.shape)
+
+
 def run_seed(config: ReferenceConfig, seed: int) -> RunRecord:
+    return train_and_record(config, seed)[0]
+
+
+def train_and_record(config: ReferenceConfig, seed: int) -> tuple[RunRecord, SpikingNet, list]:
+    """Run one seed; return its record plus the trained model and bound rules."""
     generator = seed_everything(seed)
-    n_classes = config.data.n_classes
-    train, test = synthetic_prototypes(config.data)
-    model = build_model(config.model, tuple(train.x.shape[1:]), n_classes, config.neuron)
+    train, test, n_classes = load_data(config)
+    model = build_model(config.model, input_shape(config), n_classes, config.neuron)
     rules = build_rules(config)
     for rule in rules:
         rule.init_state(model)
@@ -145,7 +186,7 @@ def run_seed(config: ReferenceConfig, seed: int) -> RunRecord:
     })
 
     with torch.no_grad():
-        _, observations = model(train.x[:1].unsqueeze(0))
+        _, observations = model(torch.zeros(1, 1, *input_shape(config)))
     n_neurons = count_neurons(observations)
     ops = pretrain["test"]
     inference = energy_proxy_pj(config.energy, synops=ops["synops_per_sample"], macs=ops["input_macs_per_sample"],
@@ -160,7 +201,7 @@ def run_seed(config: ReferenceConfig, seed: int) -> RunRecord:
         weight_updates=metrics["stream/shift0/adaptation_weights_written"],
     )
     metrics.update({f"stream/shift0/adaptation_energy_proxy/{k}": v for k, v in adaptation.items()})
-    return RunRecord(
+    record = RunRecord(
         experiment=config.experiment,
         config=resolved(config),
         seed=seed,
@@ -184,6 +225,7 @@ def run_seed(config: ReferenceConfig, seed: int) -> RunRecord:
         proxy_assumptions={**config.energy.assumptions(),
                            "quantity": "inference energy per clean test sample after pretraining"},
     )
+    return record, model, rules
 
 
 def main(argv: list[str] | None = None) -> list[Path]:
@@ -192,7 +234,12 @@ def main(argv: list[str] | None = None) -> list[Path]:
     parser.add_argument("--results", type=Path, default=Path("results"))
     parser.add_argument("--rule", choices=(*RULES, "all"), help="override the configured rule; 'all' runs each")
     parser.add_argument("--report", action="store_true", help="write a comparison report for these runs")
+    parser.add_argument("--export", action="store_true",
+                        help="write export.json + weights.npz (model + rule description) into each run directory")
+    parser.add_argument("--hardware", type=Path,
+                        help="hardware-constraints YAML to check exports against (implies --export)")
     args = parser.parse_args(argv)
+    hardware = load_config(HardwareConstraints, args.hardware) if args.hardware else None
 
     base = load_config(ReferenceConfig, args.config)
     rules = RULES if args.rule == "all" else [args.rule or base.rule]
@@ -200,14 +247,29 @@ def main(argv: list[str] | None = None) -> list[Path]:
     for rule in rules:
         config = replace(base, rule=rule)  # saved in the resolved config
         for seed in config.seeds:
-            record = run_seed(config, seed)
+            record, model, rules_used = train_and_record(config, seed)
             run_dir = save_run(record, args.results)
             run_dirs.append(run_dir)
             report_line(config.rule, seed, record, run_dir)
+            if args.export or hardware:
+                export_run(config, model, rules_used, run_dir, hardware)
     if args.report:
         report_dir = write_report(load_records(run_dirs), args.results, REPORT_TABLES)
         print(f"report -> {report_dir / 'report.md'}")
     return run_dirs
+
+
+def export_run(config: ReferenceConfig, model: SpikingNet, rules: list, run_dir: Path,
+               hardware: HardwareConstraints | None) -> None:
+    """Export the trained model + rules; optionally check them against hardware limits."""
+    description, weights = export_network(model, rules, config.encoding, input_shape(config))
+    if hardware:
+        findings = check_constraints(description, hardware)
+        description["constraint_check"] = {"hardware": hardware.name, "status": hardware.status,
+                                           "findings": [{"level": lv, "message": m} for lv, m in findings]}
+        counts = {lv: sum(f[0] == lv for f in findings) for lv in ("error", "warning")}
+        print(f"  export + {hardware.name} check: {counts['error']} errors, {counts['warning']} warnings")
+    save_export(description, weights, run_dir)
 
 
 def report_line(rule: str, seed: int, record: RunRecord, run_dir: Path) -> None:

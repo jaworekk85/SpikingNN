@@ -5,6 +5,7 @@ from .encoders import (
     EncodingConfig,
     direct_encode,
     encode,
+    events_encode,
     latency_encode,
     rate_encode,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "EncodingConfig",
     "direct_encode",
     "encode",
+    "events_encode",
     "latency_encode",
     "rate_encode",
 ]
