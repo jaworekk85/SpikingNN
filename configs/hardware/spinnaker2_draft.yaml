@@ -1,0 +1,17 @@
+# DRAFT target-hardware constraints, compiled from public sources (2026-10-13).
+# Every value is TO BE CONFIRMED WITH THE PARTNER; null = unknown (check skipped).
+name: SpiNNaker2 (single chip, draft)
+status: to be confirmed
+sources:
+  - "SpiNNaker2 chip: 152 processing elements, each Arm Cortex-M4F + 128 kB SRAM + accelerators (arXiv 2312.09084, 2401.04491, 2607.24396)"
+  - "py-spinnaker2: IF, LIF, CuBa-LIF neurons; reset by subtraction or to zero; 8-bit signed synapse weights; float32 neuron state (as reported in arXiv 2406.17049 and the py-spinnaker2 docs)"
+  - "Learning: software-defined on the Arm cores; no high-level learning API confirmed"
+neuron_models: [LIF, IF]
+resets: [subtract, zero]
+dt_ms: [1.0]  # 1 ms timestep commonly used; other values not verified
+weight_bits: 8
+max_fan_in: null  # unknown
+cores: 152
+memory_per_core_bytes: 131072  # 128 kB SRAM per processing element (code and buffers share it)
+on_chip_learning: "software on Arm cores (to be confirmed)"
+state_bits: 32
