@@ -169,6 +169,8 @@ bound once by the caller (`init_state`), so rule state (e.g. random feedback wei
 optimizer moments) persists across protocol stages.
 
 - Offline: train on `train`, optionally select using `tune`, then evaluate `test`.
+  Implemented: `Split.split_off_tune` and `protocols.grid_search`, which only accepts
+  `train` and `tune` splits (invariant: no tuning on test).
 - Task sequence: train/adapt in sequence and evaluate all seen tasks.
 - Prequential: predict and record quality for sample `i` before using its permitted
   adaptation information. Evaluation labels must not reach the model before prediction.

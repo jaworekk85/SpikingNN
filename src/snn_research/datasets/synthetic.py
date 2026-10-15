@@ -23,6 +23,19 @@ class Split:
         if len(self.x) != len(self.y):
             raise ValueError("x and y must have the same length")
 
+    def split_off_tune(self, fraction: float, seed: int) -> tuple[Split, Split]:
+        """Seeded disjoint split of a ``train`` split into (remaining train, ``tune``)."""
+        if self.role != "train":
+            raise ValueError("a tune split can only be carved out of a 'train' split")
+        if not 0 < fraction < 1:
+            raise ValueError("fraction must be in (0, 1)")
+        order = torch.randperm(len(self.y), generator=torch.Generator().manual_seed(seed))
+        n_tune = max(1, round(fraction * len(self.y)))
+        tune, rest = order[:n_tune], order[n_tune:]
+        tag = f"-tune{fraction:g}-seed{seed}"
+        return (Split(self.x[rest], self.y[rest], "train", self.version + tag + "-rest"),
+                Split(self.x[tune], self.y[tune], "tune", self.version + tag))
+
     def subset(self, classes: tuple[int, ...]) -> Split:
         """Samples of the given classes only (labels unchanged), same role."""
         keep = torch.isin(self.y, torch.tensor(classes))

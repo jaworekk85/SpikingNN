@@ -108,9 +108,9 @@ def train_epochs(model, rules: Sequence, train: Split, encoding: EncodingConfig,
 
 def run_offline(model, rules: Sequence, train: Split, test: Split, encoding: EncodingConfig,
                 config: OfflineConfig, generator: torch.Generator) -> dict:
-    """Train on ``train``, then evaluate once on ``test``. Rules must already be bound
+    """Train on ``train``, then evaluate once on ``test`` (or ``tune`` while tuning). Rules must already be bound
     with ``init_state(model)``; protocols order learning and evaluation only."""
-    if test.role != "test":
-        raise ValueError("run_offline evaluates on a 'test' split")
+    if test.role not in ("test", "tune"):
+        raise ValueError("run_offline evaluates on a 'test' or 'tune' split")
     traces = train_epochs(model, rules, train, encoding, config, generator)
     return {"traces": traces, "test": evaluate(model, test, encoding, config.batch_size, generator)}

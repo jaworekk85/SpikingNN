@@ -17,6 +17,13 @@ Datasets: `dataset: synthetic | mnist | nmnist` (`reference_mnist.yaml`,
 the encoding is `events` with `T` equal to the number of bins and `neuron.dt_ms` equal
 to the bin width; the config refuses anything else.
 
+`tune.py` tunes rule hyperparameters on a seeded `tune` split carved from the training
+data (`tuning` config section: fraction, split seed, tuning seeds distinct from
+evaluation seeds, per-rule grids). The objective is the mean of tune accuracy after
+pretraining and shifted-tune accuracy after the stream. The test split is loaded only
+to be discarded; `grid_search` refuses anything but `train`/`tune` roles. Output:
+`tuning_<UTC>_<hash>/tuning.json` and `best_overrides.yaml`.
+
 The complete planned reference uses a small LIF MLP, rate-encoded MNIST
 or a tiny event-data subset, surrogate BPTT and one local/three-factor rule, a
 seeded shift and pre/during/post evaluation. It reports accuracy, forgetting,

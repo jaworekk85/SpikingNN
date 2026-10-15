@@ -34,6 +34,17 @@ def load_config(cls: type[T], path: str | Path) -> T:
     return from_dict(cls, yaml.safe_load(Path(path).read_text(encoding="utf-8")))
 
 
+def override(config: T, dotted: str, value: Any) -> T:
+    """Copy of a frozen dataclass config with ``a.b.c`` replaced (validation re-runs)."""
+    head, _, rest = dotted.partition(".")
+    if head not in {f.name for f in dataclasses.fields(config)}:
+        raise ValueError(f"unknown config field {head!r} in {dotted!r}")
+    value = override(getattr(config, head), rest, value) if rest else value
+    if isinstance(value, list):
+        value = tuple(value)
+    return dataclasses.replace(config, **{head: value})
+
+
 def resolved(config: Any) -> dict[str, Any]:
     """Full config including defaults, as plain JSON/YAML-compatible data."""
     return dataclasses.asdict(config)

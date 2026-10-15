@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
+from typing import Any
 
 import torch
 
@@ -57,6 +58,23 @@ from snn_research.utils import load_config, provenance, resolved, seed_everythin
 
 
 RULES = ("surrogate_bptt", "three_factor", "stdp")
+
+
+@dataclass(frozen=True)
+class TuningConfig:
+    """Hyperparameter search on a ``tune`` split carved out of the training data."""
+
+    tune_fraction: float = 0.15
+    split_seed: int = 0
+    seeds: tuple[int, ...] = (100, 101)  # distinct from evaluation seeds
+    grids: dict[str, dict[str, list[Any]]] = field(default_factory=dict)  # rule -> {dotted.param: values}
+
+    def __post_init__(self) -> None:
+        if not 0 < self.tune_fraction < 1 or not self.seeds:
+            raise ValueError("tune_fraction must be in (0, 1) and at least one tuning seed is needed")
+        unknown = set(self.grids) - set(RULES)
+        if unknown:
+            raise ValueError(f"tuning grids for unknown rules: {sorted(unknown)}")
 
 REPORT_TABLES = {
     "Quality and adaptation": [
@@ -107,6 +125,7 @@ class ReferenceConfig:
     stream: PrequentialConfig = field(default_factory=PrequentialConfig)
     shift: ShiftConfig = field(default_factory=ShiftConfig)
     energy: EnergyProxyConfig = field(default_factory=EnergyProxyConfig)
+    tuning: TuningConfig = field(default_factory=TuningConfig)
 
     def __post_init__(self) -> None:
         if self.dataset not in ("synthetic", "mnist", "nmnist"):
@@ -155,10 +174,17 @@ def run_seed(config: ReferenceConfig, seed: int) -> RunRecord:
     return train_and_record(config, seed)[0]
 
 
-def train_and_record(config: ReferenceConfig, seed: int) -> tuple[RunRecord, SpikingNet, list]:
-    """Run one seed; return its record plus the trained model and bound rules."""
+def train_and_record(config: ReferenceConfig, seed: int,
+                     data: tuple[Split, Split, int] | None = None) -> tuple[RunRecord, SpikingNet, list]:
+    """Run one seed; return its record plus the trained model and bound rules.
+
+    ``data`` = (train, evaluation split, n_classes) overrides the configured data; the
+    evaluation split is ``test`` normally and ``tune`` during tuning, and metric names
+    carry its role (``pretrain/test/...`` or ``pretrain/tune/...``).
+    """
     generator = seed_everything(seed)
-    train, test, n_classes = load_data(config)
+    train, test, n_classes = data or load_data(config)
+    role = test.role
     model = build_model(config.model, input_shape(config), n_classes, config.neuron)
     rules = build_rules(config)
     for rule in rules:
@@ -175,14 +201,14 @@ def train_and_record(config: ReferenceConfig, seed: int) -> tuple[RunRecord, Spi
     online = run_prequential(model, rules, stream, config.encoding, config.stream, generator)
     clean_after, shifted_after = test_accuracy(), test_accuracy((config.shift,))
 
-    metrics = {f"pretrain/test/{k}": v for k, v in pretrain["test"].items()}
+    metrics = {f"pretrain/{role}/{k}": v for k, v in pretrain["test"].items()}
     metrics.update({f"stream/{k}": v for k, v in online["metrics"].items()})
     metrics.update({
-        "test_clean/before_stream": clean_before,
-        "test_clean/after_stream": clean_after,
-        "test_clean/forgetting": forgetting([clean_before, clean_after]),
-        "test_shifted/before_stream": shifted_before,
-        "test_shifted/after_stream": shifted_after,
+        f"{role}_clean/before_stream": clean_before,
+        f"{role}_clean/after_stream": clean_after,
+        f"{role}_clean/forgetting": forgetting([clean_before, clean_after]),
+        f"{role}_shifted/before_stream": shifted_before,
+        f"{role}_shifted/after_stream": shifted_after,
     })
 
     with torch.no_grad():
@@ -191,7 +217,7 @@ def train_and_record(config: ReferenceConfig, seed: int) -> tuple[RunRecord, Spi
     ops = pretrain["test"]
     inference = energy_proxy_pj(config.energy, synops=ops["synops_per_sample"], macs=ops["input_macs_per_sample"],
                                 neuron_updates=ops["neuron_updates_per_sample"])
-    metrics.update({f"pretrain/test/energy_proxy_per_sample/{k}": v for k, v in inference.items()})
+    metrics.update({f"pretrain/{role}/energy_proxy_per_sample/{k}": v for k, v in inference.items()})
     window = config.shift.schedule.end - config.shift.schedule.start
     adaptation = energy_proxy_pj(
         config.energy,
@@ -214,8 +240,9 @@ def train_and_record(config: ReferenceConfig, seed: int) -> tuple[RunRecord, Spi
             "n_synapses": synapse_count(model, observations),
             "n_weights": sum(p.numel() for n, p in model.named_parameters() if n.endswith("weight")),
         },
-        dataset={"version": train.version, "n_train": len(train.y), "n_test": len(test.y),
-                 "shifted_test": "test split under `shift` at full strength"},
+        dataset={"version": train.version, "evaluation_version": test.version, "evaluation_role": role,
+                 "n_train": len(train.y), f"n_{role}": len(test.y),
+                 f"shifted_{role}": f"{role} split under `shift` at full strength"},
         protocol="offline_pretrain -> prequential_stream",
         metrics=metrics,
         traces={**{f"pretrain/{k}": v for k, v in pretrain["traces"].items()},
@@ -223,7 +250,7 @@ def train_and_record(config: ReferenceConfig, seed: int) -> tuple[RunRecord, Spi
         shift=resolved(config.shift),
         energy_proxy=inference["total_pj"],
         proxy_assumptions={**config.energy.assumptions(),
-                           "quantity": "inference energy per clean test sample after pretraining"},
+                           "quantity": f"inference energy per clean {role} sample after pretraining"},
     )
     return record, model, rules
 

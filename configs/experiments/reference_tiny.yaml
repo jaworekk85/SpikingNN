@@ -67,3 +67,14 @@ energy:  # proxy coefficients (pJ per operation); arithmetic only, not measured 
   pj_per_neuron_update: 0.0
   pj_per_weight_update: 0.0
   source: "Horowitz ISSCC 2014 / Han et al. 2015: 45 nm FP32 arithmetic only, no memory access"
+tuning:  # tiny grids for the smoke test; search uses a tune split, never test
+  tune_fraction: 0.15
+  split_seed: 0
+  seeds: [100]
+  grids:
+    surrogate_bptt:
+      surrogate_bptt.lr: [0.003, 0.01]
+    three_factor:
+      three_factor.lr: [0.3, 1.0]
+    stdp:
+      stdp.a_plus: [0.0003, 0.001]

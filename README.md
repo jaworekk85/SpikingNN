@@ -61,6 +61,20 @@ Te same eksperymenty na prawdziwych danych (podzbiór 6 000 / 1 000 próbek, CPU
 
 Dane pobierają się automatycznie przy pierwszym uruchomieniu do `data\` (ignorowane
 przez Git) i są sprawdzane sumami MD5. Testy nigdy niczego nie pobierają.
+
+## Strojenie parametrów (bez zaglądania do testu)
+
+Parametry reguł stroi się na zbiorze `tune` wydzielonym z danych treningowych; zbiór
+testowy nie bierze w tym udziału (narzędzie odmawia jego przyjęcia). Siatki parametrów
+są w sekcji `tuning` konfiguracji:
+
+```powershell
+.\.venv\Scripts\python.exe experiments\reference\tune.py --config configs\experiments\reference_mnist.yaml
+```
+
+Wynik trafia do `results\<eksperyment>\tuning_<czas>_<hash>\` (`tuning.json` ze
+wszystkimi wynikami, `best_overrides.yaml` z najlepszymi ustawieniami do przeniesienia
+do konfiguracji).
 `--hardware configs\hardware\spinnaker2_draft.yaml` dodatkowo eksportuje model i regułę
 i sprawdza je względem szkicu ograniczeń SpiNNaker2 (do potwierdzenia z partnerem).
 

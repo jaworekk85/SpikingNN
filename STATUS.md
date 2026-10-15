@@ -1,6 +1,6 @@
 # Project status
 
-Updated: 2026-10-13 (Europe/Warsaw).
+Updated: 2026-10-14 (Europe/Warsaw).
 
 ## Current phase
 
@@ -136,6 +136,24 @@ Phases 0–2 were accepted on 2026-10-11; Phases 3–4 and multi-seed reporting 
   `reference_nmnist.yaml` (6k train / 1k test, 128 hidden LIF, 3 seeds).
 - Three-factor update now in closed form (one matrix product instead of per-sample
   per-synapse traces): identical up to float32 rounding (tested), MNIST run 286 s -> 16 s.
+
+### Tuning without test data (2026-10-14, before Phase 6)
+- `Split.split_off_tune` (seeded, disjoint `train` -> remaining `train` + `tune`) and
+  `protocols.grid_search` (refuses anything but `train`/`tune` roles; scorer only ever
+  receives those two splits). `utils.override` sets dotted config fields with validation.
+- `experiments/reference/tune.py` + `tuning` config section (fraction 0.15, split seed,
+  tuning seeds 100/101 distinct from evaluation seeds 0–2, per-rule grids: BPTT 5,
+  three-factor 9, STDP 8 candidates). Objective: mean of tune accuracy after pretraining
+  and shifted-tune accuracy after the stream. Writes `tuning_<UTC>_<hash>/`.
+- The reference run can evaluate on a `tune` split; metric names carry the role
+  (`pretrain/tune/...`, `tune_shifted/...`).
+- CI fix: a Python-3.12-only f-string broke CI on 3.11 for two commits (now green);
+  new code is also compile-checked locally with Python 3.10.
+
+**Correction:** the local-rule settings in `reference_mnist.yaml` / `reference_nmnist.yaml`
+from 2026-10-13 were chosen by looking at *test* accuracy, which violates the "no tuning
+on test" invariant. Those numbers (above) are therefore optimistic for the local rules
+and must not be used as results; they are replaced by tune-split tuning below.
 
 ## Validation
 
