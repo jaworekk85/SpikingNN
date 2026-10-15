@@ -1,31 +1,22 @@
 """End-to-end smoke runs of the reference pipeline on synthetic data, for every rule."""
 
-import importlib.util
 import json
-import sys
 from dataclasses import replace
 from pathlib import Path
 
+import pipeline
 import pytest
+import run
+
+from snn_research.utils import load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "experiments" / "reference_tiny.yaml"
 
 
-def load_reference():
-    spec = importlib.util.spec_from_file_location("reference_run", ROOT / "experiments" / "reference" / "run.py")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module  # needed by dataclasses during exec
-    spec.loader.exec_module(module)
-    return module
-
-
-reference = load_reference()
-
-
 def test_reference_cli_writes_one_record_per_seed_and_a_report(tmp_path):
     hardware = ROOT / "configs" / "hardware" / "spinnaker2_draft.yaml"
-    run_dirs = reference.main(["--config", str(CONFIG), "--results", str(tmp_path), "--report",
+    run_dirs = run.main(["--config", str(CONFIG), "--results", str(tmp_path), "--report",
                                "--hardware", str(hardware)])
     assert len(run_dirs) == 2
     export = json.loads((run_dirs[0] / "export.json").read_text())
@@ -56,8 +47,8 @@ def test_reference_cli_writes_one_record_per_seed_and_a_report(tmp_path):
     ],
 )
 def test_same_model_and_data_train_with_each_rule(rule, localities):
-    config = replace(reference.load_config(reference.ReferenceConfig, CONFIG), rule=rule)
-    a, b = reference.run_seed(config, 0), reference.run_seed(config, 0)
+    config = replace(load_config(pipeline.ReferenceConfig, CONFIG), rule=rule)
+    a, b = pipeline.run_seed(config, 0), pipeline.run_seed(config, 0)
     assert a.metrics["pretrain/test/accuracy"] > 0.4  # 4 classes: chance is 0.25
     assert [d["locality"] for d in a.rule_declarations] == localities
     assert a.metrics == b.metrics and a.traces == b.traces  # same seed -> same result

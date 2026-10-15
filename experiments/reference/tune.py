@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
-from run import RULES, ReferenceConfig, load_data, train_and_record
+from pipeline import RULES, ReferenceConfig, load_data, train_and_record
 
 from snn_research.protocols import grid_search
 from snn_research.utils import load_config, override, provenance, resolved

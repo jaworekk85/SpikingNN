@@ -2,13 +2,12 @@
 hand-made files: nothing is downloaded."""
 
 import gzip
-import importlib.util
-import sys
 import zipfile
 from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
+import pipeline
 import pytest
 import torch
 
@@ -17,6 +16,7 @@ from snn_research.datasets.mnist import fetch as fetch_mnist
 from snn_research.datasets.mnist import read_idx
 from snn_research.datasets.nmnist import NMNISTConfig, bin_events, decode_events, read_split
 from snn_research.encoding import EncodingConfig, encode, events_encode
+from snn_research.utils import load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -95,11 +95,7 @@ def test_compact_uint8_splits_yield_float_batches():
 
 
 def test_reference_config_ties_event_data_to_encoding_and_timestep():
-    spec = importlib.util.spec_from_file_location("reference_run_cfg", ROOT / "experiments" / "reference" / "run.py")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    config = module.load_config(module.ReferenceConfig, ROOT / "configs" / "experiments" / "reference_nmnist.yaml")
+    config = load_config(pipeline.ReferenceConfig, ROOT / "configs" / "experiments" / "reference_nmnist.yaml")
     assert config.neuron.dt_ms == config.nmnist.bin_ms and config.encoding.T == config.nmnist.T
     with pytest.raises(ValueError, match="dt_ms"):
         replace(config, neuron=replace(config.neuron, dt_ms=1.0))

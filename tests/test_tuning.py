@@ -1,11 +1,10 @@
-import importlib
 import json
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
 import torch
+import tune
 import yaml
 
 from snn_research.datasets import Split
@@ -74,10 +73,6 @@ def test_override_replaces_nested_fields_and_revalidates():
 
 
 def test_tune_script_scores_on_tune_split_only(tmp_path, monkeypatch):
-    monkeypatch.syspath_prepend(str(ROOT / "experiments" / "reference"))
-    for name in ("run", "tune"):
-        sys.modules.pop(name, None)
-    tune = importlib.import_module("tune")
     real = tune.train_and_record
     roles = []
 
