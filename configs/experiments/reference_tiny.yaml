@@ -1,80 +1,15 @@
-# Tiny CPU pipeline check on synthetic data. Pipeline validation, not a result.
+# Tiny CPU pipeline check on synthetic data (seconds). Pipeline validation, not a result.
+# Only non-default values are listed; every run saves the full resolved config.
 experiment: reference_tiny
 seeds: [0, 1]
-device: cpu
-data:
-  n_train: 256
-  n_test: 128
-  n_classes: 4
-  shape: [16]
-  noise: 0.15
-  seed: 0
-encoding:
-  kind: rate
-  T: 20
-neuron:
-  tau_mem_ms: 10.0
-  dt_ms: 1.0
-  threshold: 1.0
-  reset: subtract
-  refractory_steps: 0
-  surrogate_slope: 10.0
 model:
-  kind: mlp
-  hidden: [32]
   init_gain: 5.0  # default init leaves hidden LIF layers almost silent
-rule: surrogate_bptt  # or three_factor, stdp (STDP hidden + three-factor readout)
-surrogate_bptt:
-  lr: 0.01
-three_factor:
-  lr: 1.0
-  readout_lr: 5.0
-  tau_pre_ms: 10.0
-  tau_eligibility_ms: 20.0
-  pseudo_slope: 5.0
-  train_hidden: true
-  w_max: 0.0  # 0 = unbounded
-  weight_bits: 0  # 0 = full precision; e.g. 8 with w_max > 0 for fixed-point weights
-stdp:
-  a_plus: 0.001
-  a_minus: 0.00105
-  tau_plus_ms: 10.0
-  tau_minus_ms: 10.0
-  w_max: 1.0
-  weight_bits: 0
-pretrain:
-  epochs: 5
-  batch_size: 32
-stream:  # prequential: predict each minibatch, then adapt on it
-  length: 768
-  batch_size: 8
-  adapt: true
-  window: 64
-  q_target: 0.8
-shift:
-  kind: noise  # noise | intensity | label_permutation | latency_jitter (magnitude = max delay steps)
-  magnitude: 0.3
-  seed: 0
-  schedule:
-    timing: abrupt  # abrupt | gradual | incremental | recurring
-    start: 256
-    end: 512
-    steps: 4
-    period: 64
-energy:  # proxy coefficients (pJ per operation); arithmetic only, not measured energy
-  pj_per_synop: 0.9
-  pj_per_mac: 4.6
-  pj_per_neuron_update: 0.0
-  pj_per_weight_update: 0.0
-  source: "Horowitz ISSCC 2014 / Han et al. 2015: 45 nm FP32 arithmetic only, no memory access"
-tuning:  # tiny grids for the smoke test; search uses a tune split, never test
-  tune_fraction: 0.15
-  split_seed: 0
+# Defaults otherwise: 16-dim synthetic prototypes (4 classes), rate coding T=20, LIF
+# tau 10 ms / dt 1 ms, MLP 32 hidden, abrupt noise shift (0.3) at samples 256-511 of 768,
+# energy proxy 0.9 pJ/synop and 4.6 pJ/MAC. Rule: --rule surrogate_bptt | three_factor | stdp | all.
+tuning:  # tiny grids for the smoke test; tuning uses a tune split, never test
   seeds: [100]
   grids:
-    surrogate_bptt:
-      surrogate_bptt.lr: [0.003, 0.01]
-    three_factor:
-      three_factor.lr: [0.3, 1.0]
-    stdp:
-      stdp.a_plus: [0.0003, 0.001]
+    surrogate_bptt: {surrogate_bptt.lr: [0.003, 0.01]}
+    three_factor: {three_factor.lr: [0.3, 1.0]}
+    stdp: {stdp.a_plus: [0.0003, 0.001]}
